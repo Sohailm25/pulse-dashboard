@@ -8,25 +8,40 @@ import { useAuthStore } from '@/stores/auth-store';
 
 console.log('ReferencePage component loaded');
 
+const DEFAULT_CONTENT = '# Reference Guide\n\nAdd your notes here...\n\n## Features\n\n- Supports **bold** and *italic* text\n- Creates [links](https://example.com)\n- Makes lists\n  - With nested items\n  - And more\n- Handles `inline code` and code blocks\n\n```javascript\nconst example = "This is a code block";\nconsole.log(example);\n```\n\n## Tables\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n| Cell 3   | Cell 4   |';
+
 export function ReferencePage() {
   console.log('ReferencePage rendering');
   
   const { user } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(DEFAULT_CONTENT);
 
   useEffect(() => {
     console.log('ReferencePage useEffect - user:', user);
-    if (user) {
-      const savedContent = localStorage.getItem(`referenceContent-${user.id}`) || '# Reference Guide\n\nAdd your notes here...\n\n## Features\n\n- Supports **bold** and *italic* text\n- Creates [links](https://example.com)\n- Makes lists\n  - With nested items\n  - And more\n- Handles `inline code` and code blocks\n\n```javascript\nconst example = "This is a code block";\nconsole.log(example);\n```\n\n## Tables\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n| Cell 3   | Cell 4   |';
-      setContent(savedContent);
+    if (typeof window !== 'undefined' && user) {
+      try {
+        const savedContent = localStorage.getItem(`referenceContent-${user.id}`);
+        if (savedContent) {
+          setContent(savedContent);
+        }
+      } catch (error) {
+        console.error('Error accessing localStorage:', error);
+        // Keep the default content if localStorage is not available
+      }
     }
   }, [user]);
 
   const handleSave = () => {
-    if (user) {
-      localStorage.setItem(`referenceContent-${user.id}`, content);
-      setIsEditing(false);
+    if (typeof window !== 'undefined' && user) {
+      try {
+        localStorage.setItem(`referenceContent-${user.id}`, content);
+        setIsEditing(false);
+      } catch (error) {
+        console.error('Error saving to localStorage:', error);
+        // Show an error message to the user
+        alert('Failed to save your content. Please try again.');
+      }
     }
   };
 

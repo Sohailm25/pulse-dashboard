@@ -4,6 +4,7 @@ import { Clock, Target, TrendingUp, Brain, Heart, Dumbbell } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store';
 import { useHabitStore } from '@/stores/habit-store';
 import { startOfWeek, endOfWeek, eachDayOfInterval, format, differenceInMinutes, parse, addDays } from 'date-fns';
+import { useState, useEffect } from 'react';
 
 console.log('AnalyticsPage component loaded');
 
@@ -15,88 +16,128 @@ export function AnalyticsPage() {
   
   const projects = getProjectsForUser();
   const habits = getHabitsForUser();
+  const [colorVars, setColorVars] = useState<Record<string, string>>({});
+  const [projectData, setProjectData] = useState<any>({ labels: [], datasets: [] });
 
   console.log('Projects:', projects);
   console.log('Habits:', habits);
 
+  // Extract color values from CSS variables safely in useEffect
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    
+    const vars: Record<string, string> = {};
+    try {
+      projects.forEach(project => {
+        const colorParts = project.color.split('-');
+        if (colorParts.length >= 2) {
+          const colorType = colorParts[1]; // e.g., "purple" from "bg-purple-600"
+          const colorVar = getComputedStyle(document.documentElement)
+            .getPropertyValue(`--${colorType}-600`)
+            .trim();
+          vars[project.color] = colorVar;
+        }
+      });
+      setColorVars(vars);
+    } catch (error) {
+      console.error('Error accessing CSS variables:', error);
+    }
+  }, [projects]);
+
   // Calculate daily (non-cumulative) time spent per project
   const calculateTimeSpent = () => {
-    const today = new Date();
-    const weekStart = startOfWeek(today);
-    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    try {
+      const today = new Date();
+      const weekStart = startOfWeek(today);
+      const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-    return projects.map(project => {
-      // Calculate daily hours (non-cumulative)
-      const dailyData = weekDays.map(day => {
-        const dateStr = format(day, 'yyyy-MM-dd');
-        let dailyMinutes = 0;
+      return projects.map(project => {
+        // Calculate daily hours (non-cumulative)
+        const dailyData = weekDays.map(day => {
+          const dateStr = format(day, 'yyyy-MM-dd');
+          let dailyMinutes = 0;
 
-        project.recurringSessions.forEach(session => {
-          const completion = session.completions?.find(c => c.date === dateStr);
-          if (completion?.completed) {
-            const startTime = parse(session.startTime, 'HH:mm', day);
-            const endTime = parse(session.endTime, 'HH:mm', day);
-            dailyMinutes += differenceInMinutes(endTime, startTime);
-          }
+          project.recurringSessions.forEach(session => {
+            const completion = session.completions?.find(c => c.date === dateStr);
+            if (completion?.completed) {
+              const startTime = parse(session.startTime, 'HH:mm', day);
+              const endTime = parse(session.endTime, 'HH:mm', day);
+              dailyMinutes += differenceInMinutes(endTime, startTime);
+            }
+          });
+
+          return Math.round((dailyMinutes / 60) * 100) / 100; // Convert to hours and round to 2 decimals
         });
 
-        return Math.round((dailyMinutes / 60) * 100) / 100; // Convert to hours and round to 2 decimals
+        // Calculate cumulative hours
+        const cumulativeData = dailyData.reduce((acc: number[], hours: number) => {
+          const lastValue = acc.length > 0 ? acc[acc.length - 1] : 0;
+          acc.push(lastValue + hours);
+          return acc;
+        }, []);
+
+        const colorVar = colorVars[project.color] || '0, 0, 0'; // Default to black if color not found
+
+        return {
+          label: project.title,
+          data: cumulativeData,
+          borderColor: `rgb(${colorVar})`,
+          backgroundColor: `rgba(${colorVar}, 0.1)`,
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2
+        };
       });
+    } catch (error) {
+      console.error('Error calculating time spent:', error);
+      return [];
+    }
+  };
 
-      // Calculate cumulative hours
-      const cumulativeData = dailyData.reduce((acc: number[], hours: number) => {
-        const lastValue = acc.length > 0 ? acc[acc.length - 1] : 0;
-        acc.push(lastValue + hours);
-        return acc;
-      }, []);
-
-      // Extract color values from CSS variables
-      const colorType = project.color.split('-')[1]; // e.g., "purple" from "bg-purple-600"
-      const colorVar = getComputedStyle(document.documentElement)
-        .getPropertyValue(`--${colorType}-600`)
-        .trim();
-
-      return {
-        label: project.title,
-        data: cumulativeData,
-        borderColor: `rgb(${colorVar})`,
-        backgroundColor: `rgba(${colorVar}, 0.1)`,
-        fill: true,
-        tension: 0.4,
-        borderWidth: 2
+  // Calculate project data in useEffect to avoid doing it during render
+  useEffect(() => {
+    if (Object.keys(colorVars).length === 0) return;
+    
+    try {
+      const data = {
+        labels: Array.from({ length: 7 }, (_, i) => 
+          format(addDays(startOfWeek(new Date()), i), 'EEE')
+        ),
+        datasets: calculateTimeSpent()
       };
-    });
-  };
-
-  const projectData = {
-    labels: Array.from({ length: 7 }, (_, i) => 
-      format(addDays(startOfWeek(new Date()), i), 'EEE')
-    ),
-    datasets: calculateTimeSpent()
-  };
+      setProjectData(data);
+    } catch (error) {
+      console.error('Error setting project data:', error);
+    }
+  }, [colorVars, projects]);
 
   // Calculate total hours this week from completed sessions
   const calculateTotalHours = () => {
-    let totalMinutes = 0;
-    const weekStart = startOfWeek(new Date());
-    const weekEnd = endOfWeek(new Date());
-    const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
+    try {
+      let totalMinutes = 0;
+      const weekStart = startOfWeek(new Date());
+      const weekEnd = endOfWeek(new Date());
+      const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-    projects.forEach(project => {
-      project.recurringSessions.forEach(session => {
-        days.forEach(day => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          const completion = session.completions?.find(c => c.date === dateStr);
-          if (completion?.completed) {
-            const startTime = parse(session.startTime, 'HH:mm', day);
-            const endTime = parse(session.endTime, 'HH:mm', day);
-            totalMinutes += differenceInMinutes(endTime, startTime);
-          }
+      projects.forEach(project => {
+        project.recurringSessions.forEach(session => {
+          days.forEach(day => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const completion = session.completions?.find(c => c.date === dateStr);
+            if (completion?.completed) {
+              const startTime = parse(session.startTime, 'HH:mm', day);
+              const endTime = parse(session.endTime, 'HH:mm', day);
+              totalMinutes += differenceInMinutes(endTime, startTime);
+            }
+          });
         });
       });
-    });
 
-    return Math.round(totalMinutes / 60);
+      return Math.round(totalMinutes / 60);
+    } catch (error) {
+      console.error('Error calculating total hours:', error);
+      return 0;
+    }
   };
 
   const totalHoursThisWeek = calculateTotalHours();
@@ -192,8 +233,9 @@ export function AnalyticsPage() {
       {/* Project Stats */}
       <div className="grid grid-cols-3 gap-6">
         {projects.map(project => {
-          const projectStats = projectData.datasets.find(d => d.label === project.title);
+          const projectStats = projectData.datasets.find((d: any) => d.label === project.title);
           const totalHours = projectStats?.data[projectStats.data.length - 1] || 0;
+          const colorVar = colorVars[project.color] || '0, 0, 0';
           
           return (
             <div
@@ -209,18 +251,14 @@ export function AnalyticsPage() {
                 <div
                   className="h-2 rounded-full"
                   style={{
-                    background: `rgba(${getComputedStyle(document.documentElement)
-                      .getPropertyValue(project.color.replace('bg-', '--'))
-                      .trim()}, 0.1)`
+                    background: `rgba(${colorVar}, 0.1)`
                   }}
                 >
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
                       width: `${(totalHours / (totalHoursThisWeek || 1)) * 100}%`,
-                      backgroundColor: `rgb(${getComputedStyle(document.documentElement)
-                        .getPropertyValue(project.color.replace('bg-', '--'))
-                        .trim()})`
+                      backgroundColor: `rgb(${colorVar})`
                     }}
                   />
                 </div>

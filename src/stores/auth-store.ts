@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase } from '@/lib/supabase';
 
 interface User {
   id: string;
@@ -16,6 +15,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   error: string | null;
   clearError: () => void;
+  checkAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -25,60 +25,87 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
       clearError: () => set({ error: null }),
+      
+      checkAuth: async () => {
+        try {
+          set({ isLoading: true, error: null });
+          const response = await fetch('/api/auth/me', {
+            credentials: 'include'
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            set({ user: data.user });
+          } else {
+            set({ user: null });
+          }
+        } catch (error) {
+          console.error('Check auth error:', error);
+          set({ user: null });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+      
       signIn: async (email: string, password: string) => {
         try {
           set({ isLoading: true, error: null });
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password }),
+            credentials: 'include'
           });
-          if (error) throw error;
-          if (data.user) {
-            set({ 
-              user: {
-                id: data.user.id,
-                email: data.user.email!,
-                name: data.user.user_metadata.name
-              }
-            });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Login failed');
           }
+          
+          const data = await response.json();
+          set({ user: data.user });
         } catch (error) {
           set({ error: (error as Error).message });
         } finally {
           set({ isLoading: false });
         }
       },
+      
       signUp: async (email: string, password: string, name: string) => {
         try {
           set({ isLoading: true, error: null });
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: { name }
-            }
+          const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ email, password, name }),
+            credentials: 'include'
           });
-          if (error) throw error;
-          if (data.user) {
-            set({ 
-              user: {
-                id: data.user.id,
-                email: data.user.email!,
-                name: data.user.user_metadata.name
-              }
-            });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Registration failed');
           }
+          
+          const data = await response.json();
+          set({ user: data.user });
         } catch (error) {
           set({ error: (error as Error).message });
         } finally {
           set({ isLoading: false });
         }
       },
+      
       signOut: async () => {
         try {
           set({ isLoading: true, error: null });
-          const { error } = await supabase.auth.signOut();
-          if (error) throw error;
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'include'
+          });
           set({ user: null });
         } catch (error) {
           set({ error: (error as Error).message });

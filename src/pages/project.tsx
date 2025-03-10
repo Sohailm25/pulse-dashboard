@@ -7,7 +7,8 @@ import { useProjectStore } from '@/stores/project-store';
 
 export function ProjectPage() {
   const { id } = useParams();
-  const { projects } = useProjectStore();
+  const { getProjectsForUser } = useProjectStore();
+  const projects = getProjectsForUser();
   const currentProject = projects.find(p => p.id === id);
 
   const [sessions, setSessions] = useState<WorkSession[]>([
