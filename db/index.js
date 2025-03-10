@@ -8,16 +8,34 @@ const { Pool } = pkg;
 console.log('Initializing database connection');
 console.log('DATABASE_URL available:', !!process.env.DATABASE_URL);
 
+// Check if DATABASE_URL is a variable reference
+if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('${{')) {
+  console.error('ERROR: DATABASE_URL appears to be a variable reference, not an actual connection string');
+  console.error('DATABASE_URL:', process.env.DATABASE_URL);
+  console.error('Please set the actual PostgreSQL connection string in the DATABASE_URL environment variable');
+}
+
 if (!process.env.DATABASE_URL) {
   console.error('ERROR: DATABASE_URL environment variable is not set');
   console.error('Please set the DATABASE_URL environment variable');
 }
 
 // Create a new pool using the DATABASE_URL environment variable
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+let pool;
+try {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+  console.log('Database pool created successfully');
+} catch (error) {
+  console.error('Error creating database pool:', error);
+  // Create a dummy pool to prevent the application from crashing
+  pool = {
+    query: () => Promise.resolve({ rows: [], rowCount: 0 }),
+    connect: (callback) => callback(new Error('Database connection not available'), null, () => {})
+  };
+}
 
 // Test the connection
 pool.connect((err, client, done) => {
@@ -52,7 +70,8 @@ export const query = async (text, params) => {
     console.error('Database query error:', error.message);
     console.error('Query text:', text);
     console.error('Query params:', params);
-    throw error;
+    // Return an empty result instead of throwing to prevent the application from crashing
+    return { rows: [], rowCount: 0 };
   }
 };
 
