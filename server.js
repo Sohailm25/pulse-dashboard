@@ -18,6 +18,7 @@ console.log('Database connection available:', !!process.env.DATABASE_URL);
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+console.log('Server will listen on port:', PORT);
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -37,7 +38,8 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    database: !!process.env.DATABASE_URL
+    database: !!process.env.DATABASE_URL,
+    port: PORT
   });
 });
 
@@ -59,7 +61,7 @@ app.get('*', (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Server URL: http://localhost:${PORT}`);
 }); 
