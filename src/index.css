@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: 79 70 229;
+  --primary-foreground: 255 255 255;
+
+  /* Project Colors */
+  --purple-600: 124 58 237;
+  --blue-600: 37 99 235;
+  --green-600: 22 163 74;
+  --yellow-600: 202 138 4;
+  --orange-600: 234 88 12;
+  --red-600: 220 38 38;
+  --pink-600: 219 39 119;
+  --indigo-600: 79 70 229;
+}
+
+.bg-primary {
+  background-color: rgb(var(--primary));
+}
+
+.text-primary {
+  color: rgb(var(--primary));
+}
+
+/* Project Colors */
+.bg-purple-600 {
+  background-color: rgb(var(--purple-600));
+}
+
+.bg-blue-600 {
+  background-color: rgb(var(--blue-600));
+}
+
+.bg-green-600 {
+  background-color: rgb(var(--green-600));
+}
+
+.bg-yellow-600 {
+  background-color: rgb(var(--yellow-600));
+}
+
+.bg-orange-600 {
+  background-color: rgb(var(--orange-600));
+}
+
+.bg-red-600 {
+  background-color: rgb(var(--red-600));
+}
+
+.bg-pink-600 {
+  background-color: rgb(var(--pink-600));
+}
+
+.bg-indigo-600 {
+  background-color: rgb(var(--indigo-600));
+}
+
+/* Dark mode transitions */
+.dark * {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Mobile-first responsive styles */
+@media (max-width: 768px) {
+  .mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 1rem;
+    border-top: 1px solid #e5e7eb;
+    z-index: 50;
+    display: flex;
+    justify-content: space-around;
+  }
+
+  .dark .mobile-nav {
+    background: #1f2937;
+    border-top-color: #374151;
+  }
+
+  .mobile-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .mobile-full {
+    width: 100% !important;
+  }
+
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .mobile-hidden {
+    display: none !important;
+  }
+
+  .mobile-center {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+  }
+
+  .mobile-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  .mobile-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .mobile-wrap {
+    flex-wrap: wrap !important;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
