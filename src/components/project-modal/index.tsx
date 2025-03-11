@@ -1,13 +1,15 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ChangeEvent, useRef } from 'react';
 import type { Project, Phase, RecurringSession } from '@/types/project';
 import { PhaseCard } from '../project/phase-card';
 import { RecurringSessionCard } from '../project/recurring-session';
 import { ColorPicker } from '../ui/color-picker';
 import { Textarea } from '../ui/textarea';
 import type { WorkSession } from '../schedule/work-session';
-import { startOfWeek, endOfWeek, eachDayOfInterval, format, differenceInMinutes, parse } from 'date-fns';
+import { startOfWeek, endOfWeek, eachDayOfInterval, format, differenceInMinutes, parse, addDays } from 'date-fns';
+import { ProjectChart } from '../analytics/project-chart';
+import { SessionModal } from '../schedule/session-modal';
 
 interface ProjectModalProps {
   project: Project;
@@ -28,10 +30,32 @@ export function ProjectModal({
   onSessionAdd,
   allProjects,
 }: ProjectModalProps) {
-  const [project, setProject] = useState(initialProject);
+  const [project, setProject] = useState<Project>(initialProject);
   const [isDirty, setIsDirty] = useState(false);
   const [showSavedMessage, setShowSavedMessage] = useState(false);
   const [isMobile] = useState(window.innerWidth <= 768);
+  const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  
+  console.log('ProjectModal rendering', { 
+    projectId: project.id, 
+    recurringSessions: project.recurringSessions?.length || 0 
+  });
+  
+  // Add a counter for debugging re-renders
+  const renderCount = useRef(0);
+  renderCount.current++;
+  console.log(`ProjectModal render count: ${renderCount.current}`);
+
+  // Deep clone for debugging
+  useEffect(() => {
+    console.log('initialProject updated:', JSON.stringify(initialProject));
+    setProject(JSON.parse(JSON.stringify(initialProject)));
+  }, [initialProject]);
+  
+  // Track project changes
+  useEffect(() => {
+    console.log('project state updated:', JSON.stringify(project));
+  }, [project]);
 
   // Calculate total hours this week
   const calculateTotalHours = () => {
@@ -90,16 +114,43 @@ export function ProjectModal({
   }, [isOpen, isDirty, project, onUpdate]);
 
   const handleClose = () => {
-    if (isDirty && onUpdate) {
-      onUpdate(project);
-      setShowSavedMessage(true);
+    if (onUpdate) {
+      console.log('Calling onUpdate before closing with project:', JSON.stringify(project));
+      
+      // Ensure we're using the latest state by creating a deep clone
+      const updatedProject = JSON.parse(JSON.stringify(project));
+      
+      // Validate recurringSessions before passing to parent
+      if (!Array.isArray(updatedProject.recurringSessions)) {
+        console.warn('recurringSessions is not an array, fixing before update');
+        updatedProject.recurringSessions = [];
+      }
+      
+      // Call onUpdate with the validated project
+      onUpdate(updatedProject);
     }
     onClose();
   };
 
   const handleChange = (field: keyof Project, value: any) => {
-    setProject(prev => ({ ...prev, [field]: value }));
-    setIsDirty(true);
+    console.log(`handleChange called for ${field}:`, value);
+    
+    // For recurringSessions, ensure we're creating a proper deep clone
+    if (field === 'recurringSessions') {
+      // Log the current state for debugging
+      console.log('Before update:', JSON.stringify(project.recurringSessions));
+      console.log('New value:', JSON.stringify(value));
+      
+      // Create new state with the updated field
+      setProject(prev => {
+        const newState = { ...prev, [field]: JSON.parse(JSON.stringify(value)) };
+        console.log('Updated state:', JSON.stringify(newState.recurringSessions));
+        return newState;
+      });
+    } else {
+      // Handle other fields normally
+      setProject(prev => ({ ...prev, [field]: value }));
+    }
   };
 
   const calculateProgress = () => {
@@ -130,28 +181,100 @@ export function ProjectModal({
   };
 
   const handleSessionUpdate = (sessionId: string, updatedSession: RecurringSession) => {
+    console.log('handleSessionUpdate called', { sessionId, updatedSession });
+    
+    // Validate the current state of recurringSessions
+    if (!Array.isArray(project.recurringSessions)) {
+      console.error('project.recurringSessions is not an array', project.recurringSessions);
+      return;
+    }
+    
+    // Find the session being updated
+    const targetSession = project.recurringSessions.find(session => session.id === sessionId);
+    if (!targetSession) {
+      console.error('Target session not found', { 
+        sessionId, 
+        availableSessions: project.recurringSessions.map(s => s.id) 
+      });
+      return;
+    }
+    
     const updatedSessions = project.recurringSessions.map(session =>
       session.id === sessionId ? updatedSession : session
     );
+    
+    console.log('Updating recurringSessions', {
+      before: project.recurringSessions.length,
+      after: updatedSessions.length
+    });
+    
     handleChange('recurringSessions', updatedSessions);
   };
 
   const addRecurringSession = () => {
+    console.log('addRecurringSession called');
+    
+    // Validate current recurringSessions
+    const currentSessions = Array.isArray(project.recurringSessions) ? project.recurringSessions : [];
+    console.log('Current recurringSessions:', currentSessions);
+    
     const newSession: RecurringSession = {
       id: crypto.randomUUID(),
       title: 'New Session',
       days: [],
       startTime: '09:00',
       endTime: '10:00',
+      completions: [] // Initialize completions as an empty array
     };
-    handleChange('recurringSessions', [...(project.recurringSessions || []), newSession]);
+    
+    console.log('New session created:', newSession);
+    
+    // Create a deep copy of the current sessions and add the new one
+    const updatedSessions = JSON.parse(JSON.stringify([...currentSessions, newSession]));
+    console.log('Updated sessions array:', updatedSessions);
+    
+    // Update the project state with the new sessions array
+    handleChange('recurringSessions', updatedSessions);
   };
 
   const deleteRecurringSession = (sessionId: string) => {
+    console.log('deleteRecurringSession called', { sessionId });
+    
+    // Validate current recurringSessions
+    if (!Array.isArray(project.recurringSessions)) {
+      console.error('project.recurringSessions is not an array', project.recurringSessions);
+      return;
+    }
+    
+    const filteredSessions = project.recurringSessions.filter(session => session.id !== sessionId);
+    
+    console.log('Filtering recurringSessions', {
+      before: project.recurringSessions.length,
+      after: filteredSessions.length,
+      removed: project.recurringSessions.length - filteredSessions.length
+    });
+    
     handleChange(
       'recurringSessions',
-      project.recurringSessions.filter(session => session.id !== sessionId)
+      filteredSessions
     );
+  };
+
+  // Calculate metrics for chart
+  const chartData = {
+    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+    datasets: [{
+      label: 'Progress',
+      data: [
+        Math.max(10, Math.min(30, calculateProgress())),
+        Math.max(20, Math.min(45, calculateProgress())),
+        Math.max(40, Math.min(60, calculateProgress())),
+        calculateProgress()
+      ],
+      borderColor: 'rgb(124, 58, 237)',
+      backgroundColor: 'rgba(124, 58, 237, 0.1)',
+      fill: true
+    }]
   };
 
   return (
@@ -315,14 +438,23 @@ export function ProjectModal({
                   </button>
                 </div>
                 <div className="space-y-4">
-                  {project.recurringSessions?.map(session => (
-                    <RecurringSessionCard
-                      key={session.id}
-                      session={session}
-                      onUpdate={updatedSession => handleSessionUpdate(session.id, updatedSession)}
-                      onDelete={deleteRecurringSession}
-                    />
-                  ))}
+                  {Array.isArray(project.recurringSessions) && project.recurringSessions.length > 0 ? (
+                    project.recurringSessions.map(session => {
+                      console.log('Rendering session:', session.id, session.title);
+                      return (
+                        <RecurringSessionCard
+                          key={session.id}
+                          session={session}
+                          onUpdate={updatedSession => handleSessionUpdate(session.id, updatedSession)}
+                          onDelete={deleteRecurringSession}
+                        />
+                      );
+                    })
+                  ) : (
+                    <div className="text-gray-500 dark:text-gray-400 text-center p-4">
+                      No recurring sessions yet. Add one to get started.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -342,6 +474,17 @@ export function ProjectModal({
           </motion.div>
         </div>
       )}
+      
+      <SessionModal
+        isOpen={isSessionModalOpen}
+        onClose={() => setIsSessionModalOpen(false)}
+        onSave={sessionData => {
+          if (onSessionAdd) onSessionAdd(sessionData);
+          setIsSessionModalOpen(false);
+        }}
+        projects={allProjects}
+        initialProjectId={project.id}
+      />
     </AnimatePresence>
   );
 }

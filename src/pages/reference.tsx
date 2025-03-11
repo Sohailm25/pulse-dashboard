@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+// import { motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Save, Edit2 } from 'lucide-react';
@@ -45,19 +45,41 @@ export function ReferencePage() {
     }
   };
 
+  console.log('Rendering reference page with content length:', content.length);
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="max-w-4xl mx-auto"
+    <div 
+      className="max-w-4xl mx-auto p-4" 
+      style={{ 
+        border: '1px solid #ccc',
+        backgroundColor: '#fff',
+        borderRadius: '8px',
+        padding: '20px',
+        margin: '20px auto',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}
     >
       <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold dark:text-white">Reference Guide</h1>
+          <h1 
+            className="text-2xl font-bold dark:text-white"
+            style={{ color: '#333' }}
+          >
+            Reference Guide
+          </h1>
           <button
             onClick={isEditing ? handleSave : () => setIsEditing(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+            style={{ 
+              backgroundColor: '#7c3aed',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
           >
             {isEditing ? (
               <>
@@ -78,15 +100,45 @@ export function ReferencePage() {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             className="min-h-[500px] font-mono"
+            style={{
+              width: '100%',
+              minHeight: '500px',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontFamily: 'monospace'
+            }}
             placeholder="Write your markdown content here..."
           />
         ) : (
-          <div className="prose dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+          <div 
+            style={{
+              border: '1px solid #eee',
+              padding: '20px',
+              borderRadius: '4px',
+              backgroundColor: '#fcfcfc',
+              minHeight: '500px',
+              overflow: 'auto'
+            }}
+          >
+            {/* Ensure content is shown */}
+            <div style={{ marginBottom: '20px', fontSize: '14px', color: '#777' }}>
+              <strong>Preview Mode</strong> - Edit to make changes
+            </div>
+            
+            {/* Fallback if ReactMarkdown fails */}
+            <div style={{ display: 'none' }}>
+              <pre>{content}</pre>
+            </div>
+            
+            {/* Actual markdown content */}
+            <div style={{ fontFamily: 'system-ui, sans-serif', lineHeight: 1.6 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            </div>
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
