@@ -10,6 +10,71 @@ console.log('ReferencePage component loaded');
 
 const DEFAULT_CONTENT = '# Reference Guide\n\nAdd your notes here...\n\n## Features\n\n- Supports **bold** and *italic* text\n- Creates [links](https://example.com)\n- Makes lists\n  - With nested items\n  - And more\n- Handles `inline code` and code blocks\n\n```javascript\nconst example = "This is a code block";\nconsole.log(example);\n```\n\n## Tables\n\n| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |\n| Cell 3   | Cell 4   |';
 
+// Markdown styling without depending on @tailwindcss/typography plugin
+const markdownStyles = {
+  container: {
+    fontFamily: 'system-ui, sans-serif',
+    lineHeight: 1.6,
+    color: '#333',
+  },
+  h1: {
+    fontSize: '2rem',
+    fontWeight: 'bold',
+    marginBottom: '1rem',
+    marginTop: '1.5rem',
+  },
+  h2: {
+    fontSize: '1.5rem',
+    fontWeight: 'bold',
+    marginBottom: '0.75rem',
+    marginTop: '1.5rem',
+  },
+  p: {
+    marginBottom: '1rem',
+  },
+  ul: {
+    listStyleType: 'disc',
+    paddingLeft: '2rem',
+    marginBottom: '1rem',
+  },
+  ol: {
+    listStyleType: 'decimal',
+    paddingLeft: '2rem',
+    marginBottom: '1rem',
+  },
+  li: {
+    marginBottom: '0.25rem',
+  },
+  code: {
+    backgroundColor: '#f0f0f0',
+    padding: '0.25rem',
+    borderRadius: '0.25rem',
+    fontFamily: 'monospace',
+    fontSize: '0.9em',
+  },
+  pre: {
+    backgroundColor: '#f5f5f5',
+    padding: '1rem',
+    borderRadius: '0.5rem',
+    overflowX: 'auto',
+    marginBottom: '1rem',
+  },
+  table: {
+    borderCollapse: 'collapse',
+    width: '100%',
+    marginBottom: '1rem',
+  },
+  th: {
+    borderBottom: '2px solid #ddd',
+    padding: '0.5rem',
+    textAlign: 'left',
+  },
+  td: {
+    borderBottom: '1px solid #ddd',
+    padding: '0.5rem',
+  },
+};
+
 export function ReferencePage() {
   console.log('ReferencePage rendering');
   
@@ -46,6 +111,21 @@ export function ReferencePage() {
   };
 
   console.log('Rendering reference page with content length:', content.length);
+
+  // Custom components for ReactMarkdown to use our inline styles
+  const components = {
+    h1: (props) => <h1 style={markdownStyles.h1} {...props} />,
+    h2: (props) => <h2 style={markdownStyles.h2} {...props} />,
+    p: (props) => <p style={markdownStyles.p} {...props} />,
+    ul: (props) => <ul style={markdownStyles.ul} {...props} />,
+    ol: (props) => <ol style={markdownStyles.ol} {...props} />,
+    li: (props) => <li style={markdownStyles.li} {...props} />,
+    code: (props) => <code style={markdownStyles.code} {...props} />,
+    pre: (props) => <pre style={markdownStyles.pre} {...props} />,
+    table: (props) => <table style={markdownStyles.table} {...props} />,
+    th: (props) => <th style={markdownStyles.th} {...props} />,
+    td: (props) => <td style={markdownStyles.td} {...props} />,
+  };
 
   return (
     <div 
@@ -118,7 +198,8 @@ export function ReferencePage() {
               borderRadius: '4px',
               backgroundColor: '#fcfcfc',
               minHeight: '500px',
-              overflow: 'auto'
+              overflow: 'auto',
+              ...markdownStyles.container
             }}
           >
             {/* Ensure content is shown */}
@@ -126,15 +207,13 @@ export function ReferencePage() {
               <strong>Preview Mode</strong> - Edit to make changes
             </div>
             
-            {/* Fallback if ReactMarkdown fails */}
-            <div style={{ display: 'none' }}>
-              <pre>{content}</pre>
-            </div>
-            
-            {/* Actual markdown content */}
-            <div style={{ fontFamily: 'system-ui, sans-serif', lineHeight: 1.6 }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-            </div>
+            {/* Actual markdown content with custom components to handle styling */}
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm]}
+              components={components}
+            >
+              {content}
+            </ReactMarkdown>
           </div>
         )}
       </div>
