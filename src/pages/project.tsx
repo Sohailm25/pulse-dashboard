@@ -90,17 +90,41 @@ export function ProjectPage() {
   };
   
   const handleProjectUpdate = (updatedProject: any) => {
-    console.log('handleProjectUpdate called with:', JSON.stringify(updatedProject));
+    console.log('🏆 ProjectPage: handleProjectUpdate called with:', JSON.stringify(updatedProject));
     
     // Log changes specifically to recurringSessions
-    console.log('recurringSessions before:', currentProject?.recurringSessions?.length || 0);
-    console.log('recurringSessions after:', updatedProject.recurringSessions?.length || 0);
+    console.log('🏆 ProjectPage: recurringSessions before:', currentProject?.recurringSessions?.length || 0);
+    console.log('🏆 ProjectPage: recurringSessions after:', updatedProject.recurringSessions?.length || 0);
+    
+    // Deep clone the project to avoid reference issues
+    const projectToSave = JSON.parse(JSON.stringify(updatedProject));
+    
+    // Validate recurringSessions before passing to store
+    if (!Array.isArray(projectToSave.recurringSessions)) {
+      console.warn('🏆 ProjectPage: recurringSessions is not an array, fixing before update');
+      projectToSave.recurringSessions = [];
+    }
+    
+    // Validate each recurring session
+    projectToSave.recurringSessions = projectToSave.recurringSessions.map((session: any) => {
+      if (!session.completions || !Array.isArray(session.completions)) {
+        console.log('🏆 ProjectPage: Fixing missing completions array for session:', session.id);
+        session.completions = [];
+      }
+      if (!Array.isArray(session.days)) {
+        console.log('🏆 ProjectPage: Fixing missing days array for session:', session.id);
+        session.days = [];
+      }
+      return session;
+    });
+    
+    console.log('🏆 ProjectPage: Calling updateProject with validated project data');
     
     // Update local state immediately for a responsive UI
-    setLocalProject(updatedProject);
+    setLocalProject(projectToSave);
     
     // Then update the store and persist to backend
-    updateProject(updatedProject);
+    updateProject(projectToSave);
   };
 
   if (!localProject) {

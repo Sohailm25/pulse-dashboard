@@ -81,28 +81,94 @@ export function CalendarWidget({ date, events }: CalendarWidgetProps) {
   const allDays = [...weekDays, ...nextWeek];
 
   const getEventsForDay = (day: Date) => {
+    const dayFormat = format(day, 'EEE');
+    const dateStr = format(day, 'yyyy-MM-dd');
+    
+    console.log(`🗓️ Calendar: Getting events for ${dateStr} (${dayFormat})`);
+    
     const regularEvents = events.filter(event => 
       format(date, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd')
     );
+    
+    console.log(`🗓️ Calendar: Found ${regularEvents.length} regular events`);
 
-    const recurringEvents = projects.flatMap(project => 
-      project.recurringSessions.filter(session => 
-        session.days.includes(format(day, 'EEE'))
-      ).map(session => ({
-        time: session.startTime,
-        title: session.title,
-        category: project.title,
-        color: project.color,
-        projectId: project.id,
-        session
-      }))
-    );
-
-    return [...regularEvents, ...recurringEvents].sort((a, b) => {
-      const timeA = parse(a.time, 'HH:mm', new Date());
-      const timeB = parse(b.time, 'HH:mm', new Date());
-      return timeA.getTime() - timeB.getTime();
+    // Log project recurring sessions data
+    console.log(`🗓️ Calendar: Processing ${projects.length} projects for recurring sessions`);
+    projects.forEach(project => {
+      if (!project.recurringSessions || !Array.isArray(project.recurringSessions)) {
+        console.warn(`🗓️ Calendar: Project ${project.id} (${project.title}) has no valid recurringSessions array`);
+      } else {
+        console.log(`🗓️ Calendar: Project ${project.id} (${project.title}) has ${project.recurringSessions.length} recurring sessions`);
+        // Log each session's day to debug day matching
+        project.recurringSessions.forEach(session => {
+          console.log(`🗓️ Calendar: Session "${session.title}" has days: ${JSON.stringify(session.days)}`);
+        });
+      }
     });
+
+    const recurringEvents = projects.flatMap(project => {
+      if (!project.recurringSessions || !Array.isArray(project.recurringSessions)) {
+        console.warn(`🗓️ Calendar: Skipping project ${project.id} due to invalid recurringSessions`);
+        return [];
+      }
+      
+      try {
+        return project.recurringSessions
+          .filter(session => {
+            // Make sure days is an array
+            if (!Array.isArray(session.days)) {
+              console.warn(`🗓️ Calendar: Session "${session.title}" has invalid days array, fixing...`);
+              session.days = [];
+              return false;
+            }
+            
+            const hasDay = session.days.includes(dayFormat);
+            if (hasDay) {
+              console.log(`🗓️ Calendar: Found matching session "${session.title}" for day ${dayFormat} in project ${project.title}`);
+            }
+            return hasDay;
+          })
+          .map(session => {
+            // Make sure we have valid times
+            if (!session.startTime) {
+              console.warn(`🗓️ Calendar: Session "${session.title}" missing startTime, setting default`);
+              session.startTime = '09:00';
+            }
+            if (!session.endTime) {
+              console.warn(`🗓️ Calendar: Session "${session.title}" missing endTime, setting default`);
+              session.endTime = '10:00';
+            }
+            
+            return {
+              time: session.startTime,
+              title: session.title || 'Untitled Session',
+              category: project.title,
+              color: project.color,
+              projectId: project.id,
+              session
+            };
+          });
+      } catch (error) {
+        console.error(`🗓️ Calendar: Error processing recurring sessions for project ${project.title}:`, error);
+        return [];
+      }
+    });
+    
+    console.log(`🗓️ Calendar: Found ${recurringEvents.length} recurring events for ${dateStr}`);
+
+    const allEvents = [...regularEvents, ...recurringEvents].sort((a, b) => {
+      try {
+        const timeA = parse(a.time, 'HH:mm', new Date());
+        const timeB = parse(b.time, 'HH:mm', new Date());
+        return timeA.getTime() - timeB.getTime();
+      } catch (error) {
+        console.error(`🗓️ Calendar: Error sorting events:`, error);
+        return 0;
+      }
+    });
+    
+    console.log(`🗓️ Calendar: Returning ${allEvents.length} total events for ${dateStr}`);
+    return allEvents;
   };
 
   const todaysEvents = getEventsForDay(currentDate);

@@ -35,10 +35,16 @@ export function ProjectModal({
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const { showToast, hideToast, toastProps } = useToast();
+  // Add a state to track the last saved project
+  const [lastSavedProject, setLastSavedProject] = useState<string>('');
   
+  // Add more detailed logging
   console.log('ProjectModal rendering', { 
     projectId: project.id, 
-    recurringSessions: project.recurringSessions?.length || 0 
+    title: project.title,
+    recurringSessions: project.recurringSessions?.length || 0,
+    recurringsessionData: JSON.stringify(project.recurringSessions),
+    nextAction: project.nextAction
   });
   
   // Add a counter for debugging re-renders
@@ -49,29 +55,55 @@ export function ProjectModal({
   // Deep clone for debugging
   useEffect(() => {
     console.log('initialProject updated:', JSON.stringify(initialProject));
-    setProject(JSON.parse(JSON.stringify(initialProject)));
+    console.log('Initial recurring sessions:', initialProject.recurringSessions?.length || 0, 
+                JSON.stringify(initialProject.recurringSessions));
+    
+    const clonedProject = JSON.parse(JSON.stringify(initialProject));
+    
+    // Ensure recurringSessions is always an array
+    if (!Array.isArray(clonedProject.recurringSessions)) {
+      clonedProject.recurringSessions = [];
+    }
+    
+    setProject(clonedProject);
     setHasChanges(false); // Reset changes flag when initial project updates
+    
+    // Store the serialized version for comparison
+    setLastSavedProject(JSON.stringify(clonedProject));
   }, [initialProject]);
   
   // Track project changes
   useEffect(() => {
     console.log('project state updated:', JSON.stringify(project));
+    console.log('Current recurring sessions:', project.recurringSessions?.length || 0, 
+                JSON.stringify(project.recurringSessions));
     
-    // Only track changes after initial render
-    if (renderCount.current > 1) {
+    // Check if we have actual changes by comparing with last saved state
+    const currentSerialized = JSON.stringify(project);
+    const hasActualChanges = currentSerialized !== lastSavedProject;
+    
+    console.log(`Project changed: ${hasActualChanges}`);
+    
+    // Only track changes after initial render and if actual changes exist
+    if (renderCount.current > 1 && hasActualChanges) {
       setHasChanges(true);
     }
-  }, [project]);
+  }, [project, lastSavedProject]);
 
   // Auto-save when project changes after a delay
   useEffect(() => {
     if (!hasChanges) return;
     
+    console.log('Setting up auto-save timer...');
     const saveTimer = setTimeout(() => {
+      console.log('Auto-save timer triggered!');
       saveProject();
     }, 2000); // Auto-save after 2 seconds of inactivity
     
-    return () => clearTimeout(saveTimer);
+    return () => {
+      console.log('Clearing auto-save timer');
+      clearTimeout(saveTimer);
+    };
   }, [hasChanges, project]);
 
   // Calculate total hours this week from completed sessions
@@ -134,9 +166,14 @@ export function ProjectModal({
 
   // New method to validate and save the project
   const saveProject = () => {
-    if (!onUpdate) return;
+    if (!onUpdate) {
+      console.error('Cannot save project: onUpdate function is not provided');
+      return;
+    }
     
-    console.log('Saving project with updates:', JSON.stringify(project));
+    console.log('SAVING PROJECT WITH UPDATES:', JSON.stringify(project));
+    console.log('Saving recurring sessions:', project.recurringSessions?.length || 0,
+                JSON.stringify(project.recurringSessions));
     
     // Ensure we're using the latest state by creating a deep clone
     const updatedProject = JSON.parse(JSON.stringify(project));
@@ -150,22 +187,41 @@ export function ProjectModal({
     // Validate each recurring session
     updatedProject.recurringSessions = updatedProject.recurringSessions.map(session => {
       if (!session.completions || !Array.isArray(session.completions)) {
+        console.log('Fixing missing completions array for session:', session.id);
         session.completions = [];
       }
+      if (!Array.isArray(session.days)) {
+        console.log('Fixing missing days array for session:', session.id);
+        session.days = [];
+      }
+      // Ensure all required fields exist
+      if (!session.title) session.title = 'Untitled Session';
+      if (!session.startTime) session.startTime = '09:00';
+      if (!session.endTime) session.endTime = '10:00';
+      
       return session;
     });
     
     // Call onUpdate with the validated project
+    console.log('Calling onUpdate with:', JSON.stringify(updatedProject));
     onUpdate(updatedProject);
     setHasChanges(false);
+    
+    // Update lastSavedProject to reflect the saved state
+    setLastSavedProject(JSON.stringify(updatedProject));
     
     // Show success toast
     showToast('Project details saved successfully', 'success');
   };
 
   const handleClose = () => {
+    console.log('Modal closing, has changes:', hasChanges);
+    
     if (hasChanges) {
+      console.log('Saving changes before closing');
       saveProject();
+    } else {
+      console.log('No changes to save on close');
     }
     onClose();
   };
@@ -320,6 +376,22 @@ export function ProjectModal({
     }]
   };
 
+  // Function to dump the current state to console for debugging
+  const dumpStateToConsole = () => {
+    console.log('🔍 DEBUG - Current Project State:');
+    console.log(JSON.stringify(project, null, 2));
+    console.log('🔍 DEBUG - RecurringSessions Count:', project.recurringSessions?.length || 0);
+    if (Array.isArray(project.recurringSessions)) {
+      project.recurringSessions.forEach((session, i) => {
+        console.log(`🔍 Session #${i+1}: ${session.title}`);
+        console.log('  Days:', session.days);
+        console.log('  Times:', session.startTime, '-', session.endTime);
+        console.log('  Completions:', session.completions?.length || 0);
+      });
+    }
+    showToast('Project state dumped to console', 'info');
+  };
+
   if (!isOpen) return null;
   
   return (
@@ -341,12 +413,26 @@ export function ProjectModal({
             onChange={e => handleChange('title', e.target.value)}
             className="text-xl font-semibold bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded px-2 -ml-2 dark:text-white"
           />
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5 dark:text-gray-300" />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={saveProject}
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+            >
+              Save
+            </button>
+            <button
+              onClick={dumpStateToConsole}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
+            >
+              Debug
+            </button>
+            <button
+              onClick={handleClose}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5 dark:text-gray-300" />
+            </button>
+          </div>
         </div>
         
         <div className="p-6 overflow-y-auto h-full">

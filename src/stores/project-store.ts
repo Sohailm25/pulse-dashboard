@@ -167,29 +167,45 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   
   updateProject: async (project) => {
     const userId = useAuthStore.getState().user?.id;
-    if (!userId) return;
+    if (!userId) {
+      console.error('Cannot update project: No user ID found');
+      return;
+    }
     
     try {
-      console.log('Updating project in store:', JSON.stringify({
+      console.log('🔵 PROJECT-STORE: updateProject called with:', {
         id: project.id,
         title: project.title,
         recurringSessions: project.recurringSessions?.length || 0
-      }));
+      });
+      console.log('🔵 Full recurring sessions before API call:', JSON.stringify(project.recurringSessions));
       
       // Validate recurringSessions before sending to API
-      const validatedProject = { ...project };
+      const validatedProject = JSON.parse(JSON.stringify(project)); // Deep clone
       
       if (!Array.isArray(validatedProject.recurringSessions)) {
-        console.warn('recurringSessions is not an array, fixing before API call');
+        console.warn('🟠 PROJECT-STORE: recurringSessions is not an array, fixing before API call');
         validatedProject.recurringSessions = [];
       }
       
       // Validate each recurring session
       validatedProject.recurringSessions = validatedProject.recurringSessions.map(session => {
         if (!session.completions || !Array.isArray(session.completions)) {
+          console.log('🟠 PROJECT-STORE: Fixing missing completions array for session:', session.id);
           session.completions = [];
         }
+        if (!Array.isArray(session.days)) {
+          console.log('🟠 PROJECT-STORE: Fixing missing days array for session:', session.id);
+          session.days = [];
+        }
         return session;
+      });
+      
+      console.log('🔵 PROJECT-STORE: Sending to API:', {
+        url: `/api/projects/${project.id}`,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validatedProject).substring(0, 200) + '...' // Log first 200 chars
       });
       
       set({ isLoading: true, error: null });
@@ -204,11 +220,19 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('🔴 PROJECT-STORE: API error response:', errorData);
         throw new Error(errorData.message || 'Failed to update project');
       }
       
       // Get the updated project from the response
       const updatedProject = await response.json();
+      console.log('🟢 PROJECT-STORE: API response success:', {
+        id: updatedProject.id,
+        title: updatedProject.title,
+        recurringSessions: (updatedProject.recurringSessions || updatedProject.recurring_sessions)?.length || 0
+      });
+      
+      console.log('🟢 PROJECT-STORE: Full response:', JSON.stringify(updatedProject).substring(0, 200) + '...');
       
       // Process the response to ensure all fields are properly formatted
       const processedProject = {
@@ -223,18 +247,17 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
               : [])
       };
       
-      console.log('Project successfully updated:', JSON.stringify({
-        id: processedProject.id,
-        title: processedProject.title,
-        recurringSessions: processedProject.recurringSessions?.length || 0
-      }));
+      console.log('🟢 PROJECT-STORE: Project processed with sessions count:', 
+                  processedProject.recurringSessions.length);
+      console.log('🟢 Full recurring sessions after API response:', 
+                 JSON.stringify(processedProject.recurringSessions));
       
       // Update the projects in the store
       set(state => ({
         projects: state.projects.map(p => p.id === project.id ? processedProject : p)
       }));
     } catch (error) {
-      console.error('Update project error:', error);
+      console.error('🔴 PROJECT-STORE: Update project error:', error);
       set({ error: (error as Error).message });
     } finally {
       set({ isLoading: false });
