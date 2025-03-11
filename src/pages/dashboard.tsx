@@ -33,11 +33,28 @@ export function DashboardPage() {
   const [sessions, setSessions] = useState<WorkSession[]>([]);
   
   const projects = getProjectsForUser();
+  const safeProjects = Array.isArray(projects) ? projects : [];
+
+  const processedProjects = safeProjects.map(project => {
+    if (!project) return null;
+    
+    return {
+      ...project,
+      phases: Array.isArray(project.phases) ? project.phases : [],
+      recurringSessions: Array.isArray(project.recurringSessions) ? project.recurringSessions : [],
+      mvg: project.mvg || {
+        description: 'Define your minimum viable goal',
+        completed: false,
+        streak: 0,
+        completionHistory: []
+      }
+    };
+  }).filter(Boolean);
 
   const calendarEvents = sessions.map(session => ({
     time: format(session.startTime, 'h:mm a'),
     title: session.title,
-    category: projects.find(p => p.id === session.projectId)?.title || '',
+    category: safeProjects.find(p => p?.id === session.projectId)?.title || '',
     color: session.projectColor,
     projectId: session.projectId
   }));
@@ -58,7 +75,7 @@ export function DashboardPage() {
     const projectId = active.id as string;
     const newStatus = over.id === 'completed';
     
-    const project = projects.find(p => p.id === projectId);
+    const project = processedProjects.find(p => p.id === projectId);
     if (!project) return;
 
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -92,6 +109,14 @@ export function DashboardPage() {
     });
   };
 
+  const pendingMvgProjects = processedProjects.filter(project => 
+    project && project.mvg && !project.mvg.completed
+  );
+  
+  const completedMvgProjects = processedProjects.filter(project => 
+    project && project.mvg && project.mvg.completed
+  );
+
   return (
     <div className="pb-24">
       <AnimatePresence mode="wait">
@@ -103,7 +128,7 @@ export function DashboardPage() {
             className="grid grid-cols-12 gap-6 mobile-grid"
           >
             <div className="col-span-9 space-y-6">
-              <MVGStreak projects={projects} />
+              <MVGStreak projects={processedProjects} />
               
               <KanbanProvider onDragEnd={handleDragEnd}>
                 {mvgStatuses.map((status) => (
@@ -114,10 +139,7 @@ export function DashboardPage() {
                   >
                     <KanbanHeader name={status.name} color={status.color} />
                     <KanbanCards>
-                      {projects
-                        .filter(project => 
-                          status.id === 'completed' ? project.mvg.completed : !project.mvg.completed
-                        )
+                      {(status.id === 'completed' ? completedMvgProjects : pendingMvgProjects)
                         .map((project, index) => (
                           <KanbanCard
                             key={project.id}
@@ -132,7 +154,7 @@ export function DashboardPage() {
                               onUpdate={updateProject}
                               sessions={sessions}
                               onSessionAdd={handleSessionAdd}
-                              allProjects={projects}
+                              allProjects={processedProjects}
                             />
                           </KanbanCard>
                         ))}

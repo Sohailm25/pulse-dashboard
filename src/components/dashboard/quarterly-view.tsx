@@ -15,24 +15,34 @@ export function QuarterlyView() {
   const quarterEnd = endOfQuarter(today);
   const monthsInQuarter = eachMonthOfInterval({ start: quarterStart, end: quarterEnd });
 
-  // Calculate quarterly project achievements
-  const projectAchievements = projects.map(project => {
-    const completedPhases = project.phases.filter(phase => 
-      phase.subgoals.every(subgoal => subgoal.completed)
+  // Initialize with safe defaults when projects array is empty or undefined
+  const safeProjects = projects?.length ? projects : [];
+  const safeHabits = habits?.length ? habits : [];
+
+  // Calculate quarterly project achievements with defensive coding
+  const projectAchievements = safeProjects.map(project => {
+    // Ensure phases is always an array
+    const projectPhases = project.phases || [];
+    
+    const completedPhases = projectPhases.filter(phase => 
+      phase?.subgoals?.every?.(subgoal => subgoal?.completed) || false
     ).length;
 
     return {
       ...project,
       completedPhases,
-      totalPhases: project.phases.length,
-      completionRate: (completedPhases / project.phases.length) * 100
+      totalPhases: projectPhases.length,
+      completionRate: projectPhases.length ? (completedPhases / projectPhases.length) * 100 : 0
     };
   }).sort((a, b) => b.completionRate - a.completionRate);
 
   // Calculate habit streaks and consistency
-  const habitAnalytics = habits.map(habit => {
-    const quarterlyCompletions = habit.completionHistory.filter(h => 
-      isSameQuarter(new Date(h.date), today) && h.completed
+  const habitAnalytics = safeHabits.map(habit => {
+    // Ensure completionHistory is always an array
+    const completionHistory = habit.completionHistory || [];
+    
+    const quarterlyCompletions = completionHistory.filter(h => 
+      h?.date && isSameQuarter(new Date(h.date), today) && h.completed
     ).length;
 
     const consistency = (quarterlyCompletions / 90) * 100; // Approximate days in quarter
@@ -41,7 +51,7 @@ export function QuarterlyView() {
       ...habit,
       quarterlyCompletions,
       consistency,
-      streak: habit.streak
+      streak: habit.streak || 0
     };
   }).sort((a, b) => b.consistency - a.consistency);
 

@@ -23,7 +23,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   
   fetchProjects: async () => {
     const userId = useAuthStore.getState().user?.id;
-    if (!userId) return;
+    if (!userId) {
+      console.log('No user ID found, skipping project fetch');
+      return;
+    }
     
     try {
       set({ isLoading: true, error: null });
@@ -37,7 +40,42 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       }
       
       const data = await response.json();
-      set({ projects: data });
+      
+      // Process the projects to ensure all properties exist
+      const processedProjects = data.map((project: any) => {
+        // Ensure phases is an array
+        const phases = Array.isArray(project.phases) ? project.phases : [];
+        
+        // Ensure recurring_sessions/recurringSessions is an array
+        const recurringSessions = Array.isArray(project.recurring_sessions) 
+          ? project.recurring_sessions 
+          : (Array.isArray(project.recurringSessions) ? project.recurringSessions : []);
+        
+        // Ensure mvg structure is complete
+        const mvg = project.mvg || {
+          description: 'Define your minimum viable goal',
+          completed: false,
+          streak: 0,
+          completionHistory: []
+        };
+        
+        if (!mvg.completionHistory) {
+          mvg.completionHistory = [];
+        }
+        
+        if (mvg.streak === undefined) {
+          mvg.streak = 0;
+        }
+        
+        return {
+          ...project,
+          phases,
+          recurringSessions,
+          mvg
+        };
+      });
+      
+      set({ projects: processedProjects });
     } catch (error) {
       console.error('Fetch projects error:', error);
       set({ error: (error as Error).message });
@@ -187,6 +225,29 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
   
   getProjectsForUser: () => {
-    return get().projects;
+    const projects = get().projects;
+    
+    // Ensure we always return a valid array with complete objects
+    if (!projects || !Array.isArray(projects)) {
+      console.warn('Projects not available in store, returning empty array');
+      return [];
+    }
+    
+    // Map over projects to ensure each has required properties
+    return projects.map(project => {
+      if (!project) return null;
+      
+      return {
+        ...project,
+        phases: Array.isArray(project.phases) ? project.phases : [],
+        recurringSessions: Array.isArray(project.recurringSessions) ? project.recurringSessions : [],
+        mvg: project.mvg || {
+          description: 'Define your minimum viable goal',
+          completed: false, 
+          streak: 0,
+          completionHistory: []
+        }
+      };
+    }).filter(Boolean) as Project[]; // Remove any null values
   }
 }));

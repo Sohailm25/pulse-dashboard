@@ -15,31 +15,35 @@ export function MonthlyView() {
   const monthEnd = endOfMonth(today);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
+  // Ensure projects and habits arrays exist
+  const safeProjects = projects?.length ? projects : [];
+  const safeHabits = habits?.length ? habits : [];
+
   // Calculate habit completion rates for the month
   const habitStats = {
     Spiritual: {
-      total: habits.filter(h => h.category === 'Spiritual').length * daysInMonth.length,
-      completed: habits.filter(h => h.category === 'Spiritual').reduce((acc, habit) => 
-        acc + habit.completionHistory.filter(h => 
-          isSameMonth(new Date(h.date), today) && h.completed
+      total: safeHabits.filter(h => h?.category === 'Spiritual').length * daysInMonth.length,
+      completed: safeHabits.filter(h => h?.category === 'Spiritual').reduce((acc, habit) => 
+        acc + (habit?.completionHistory || []).filter(h => 
+          h?.date && isSameMonth(new Date(h.date), today) && h.completed
         ).length, 0
       ),
       icon: <Heart className="w-5 h-5 text-red-500" />
     },
     Physical: {
-      total: habits.filter(h => h.category === 'Physical').length * daysInMonth.length,
-      completed: habits.filter(h => h.category === 'Physical').reduce((acc, habit) => 
-        acc + habit.completionHistory.filter(h => 
-          isSameMonth(new Date(h.date), today) && h.completed
+      total: safeHabits.filter(h => h?.category === 'Physical').length * daysInMonth.length,
+      completed: safeHabits.filter(h => h?.category === 'Physical').reduce((acc, habit) => 
+        acc + (habit?.completionHistory || []).filter(h => 
+          h?.date && isSameMonth(new Date(h.date), today) && h.completed
         ).length, 0
       ),
       icon: <Dumbbell className="w-5 h-5 text-blue-500" />
     },
-    Intellectual: {
-      total: habits.filter(h => h.category === 'Intellectual').length * daysInMonth.length,
-      completed: habits.filter(h => h.category === 'Intellectual').reduce((acc, habit) => 
-        acc + habit.completionHistory.filter(h => 
-          isSameMonth(new Date(h.date), today) && h.completed
+    Mental: {
+      total: safeHabits.filter(h => h?.category === 'Mental').length * daysInMonth.length,
+      completed: safeHabits.filter(h => h?.category === 'Mental').reduce((acc, habit) => 
+        acc + (habit?.completionHistory || []).filter(h => 
+          h?.date && isSameMonth(new Date(h.date), today) && h.completed
         ).length, 0
       ),
       icon: <Brain className="w-5 h-5 text-purple-500" />
@@ -50,11 +54,11 @@ export function MonthlyView() {
   const habitCompletionData = {
     labels: daysInMonth.map(day => format(day, 'd')),
     datasets: Object.entries(habitStats).map(([category, _]) => {
-      const categoryHabits = habits.filter(h => h.category === category);
+      const categoryHabits = safeHabits.filter(h => h?.category === category);
       const dailyCompletions = daysInMonth.map(day => {
         const dateStr = format(day, 'yyyy-MM-dd');
         const completed = categoryHabits.reduce((acc, habit) => 
-          acc + (habit.completionHistory.find(h => h.date === dateStr)?.completed ? 1 : 0), 0
+          acc + (habit?.completionHistory || []).find(h => h.date === dateStr)?.completed ? 1 : 0, 0
         );
         return (completed / categoryHabits.length) * 100;
       });
@@ -78,18 +82,33 @@ export function MonthlyView() {
   // Generate data for project milestone chart
   const projectMilestoneData = {
     labels: daysInMonth.map(day => format(day, 'd')),
-    datasets: projects.map(project => {
-      const progressPoints = daysInMonth.map(() => project.progress);
+    datasets: safeProjects.map(project => {
+      const progressPoints = daysInMonth.map(() => project?.progress || 0);
+      
+      // Default color if project.color is undefined or can't be processed
+      let borderColor = 'rgb(107, 114, 128)'; // Default gray
+      let backgroundColor = 'rgba(107, 114, 128, 0.1)';
+      
+      try {
+        if (project?.color) {
+          const colorVar = getComputedStyle(document.documentElement)
+            .getPropertyValue(project.color.replace('bg-', '--'))
+            .trim();
+            
+          if (colorVar) {
+            borderColor = `rgb(${colorVar})`;
+            backgroundColor = `rgba(${colorVar}, 0.1)`;
+          }
+        }
+      } catch (err) {
+        console.warn('Error processing color for project:', project?.title, err);
+      }
       
       return {
-        label: project.title,
+        label: project?.title || 'Unnamed Project',
         data: progressPoints,
-        borderColor: `rgb(${getComputedStyle(document.documentElement)
-          .getPropertyValue(project.color.replace('bg-', '--'))
-          .trim()})`,
-        backgroundColor: `rgba(${getComputedStyle(document.documentElement)
-          .getPropertyValue(project.color.replace('bg-', '--'))
-          .trim()}, 0.1)`,
+        borderColor,
+        backgroundColor,
         fill: true,
         tension: 0.4,
         borderWidth: 2

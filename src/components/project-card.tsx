@@ -35,14 +35,26 @@ export function ProjectCard({
     const weekEnd = endOfWeek(new Date());
     const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
+    if (!recurringSessions || !Array.isArray(recurringSessions)) {
+      return 0;
+    }
+
     recurringSessions.forEach(session => {
+      if (!session) return;
+      
       days.forEach(day => {
         const dateStr = format(day, 'yyyy-MM-dd');
-        const completion = session.completions?.find(c => c.date === dateStr);
+        const completions = session.completions || [];
+        const completion = completions.find(c => c?.date === dateStr);
+        
         if (completion?.completed) {
-          const startTime = parse(session.startTime, 'HH:mm', day);
-          const endTime = parse(session.endTime, 'HH:mm', day);
-          totalMinutes += differenceInMinutes(endTime, startTime);
+          try {
+            const startTime = parse(session.startTime, 'HH:mm', day);
+            const endTime = parse(session.endTime, 'HH:mm', day);
+            totalMinutes += differenceInMinutes(endTime, startTime);
+          } catch (err) {
+            console.warn('Error calculating time difference:', err);
+          }
         }
       });
     });
@@ -52,15 +64,22 @@ export function ProjectCard({
 
   const handleMVGComplete = (completed: boolean) => {
     if (props.onUpdate) {
+      const safeMvg = mvg || {
+        description: 'Define your minimum viable goal',
+        completed: false,
+        streak: 0,
+        completionHistory: []
+      };
+      
       props.onUpdate({
         ...props,
         id,
         title,
         progress,
         color,
-        phases,
-        recurringSessions,
-        mvg: { ...mvg, completed },
+        phases: phases || [],
+        recurringSessions: recurringSessions || [],
+        mvg: { ...safeMvg, completed },
         nextAction,
       });
     }
