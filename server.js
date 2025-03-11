@@ -60,14 +60,19 @@ console.log('Server directory:', __dirname);
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://pulse-dash.up.railway.app'],
+  origin: function(origin, callback) {
+    // Allow any origin for debugging
+    console.log('CORS request from origin:', origin);
+    return callback(null, true);
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie']
 }));
 app.use(express.json());
 app.use(cookieParser());
-console.log('Middleware configured with CORS credentials support');
+console.log('Middleware configured with permissive CORS for debugging');
 
 // Add error handling middleware
 app.use((err, req, res, next) => {
