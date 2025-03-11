@@ -37,7 +37,6 @@ export function Layout() {
 
   const handleAddProject = () => {
     const newProject = {
-      id: crypto.randomUUID(),
       title: 'New Project',
       description: '',
       taskCount: 0,

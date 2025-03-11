@@ -52,6 +52,30 @@ router.post('/', async (req, res) => {
       nextAction
     } = req.body;
 
+    // Ensure proper initialization of JSON fields
+    const safePhases = phases || [];
+    const safeRecurringSessions = recurringSessions || [];
+    const safeMvg = mvg || {
+      description: 'Define your minimum viable goal',
+      completed: false,
+      streak: 0,
+      completionHistory: []
+    };
+
+    // If MVG doesn't have completionHistory, add it
+    if (!safeMvg.completionHistory) {
+      safeMvg.completionHistory = [];
+    }
+
+    // If MVG doesn't have streak, add it
+    if (safeMvg.streak === undefined) {
+      safeMvg.streak = 0;
+    }
+
+    console.log('Creating project with phases:', JSON.stringify(safePhases));
+    console.log('Creating project with recurringSessions:', JSON.stringify(safeRecurringSessions));
+    console.log('Creating project with mvg:', JSON.stringify(safeMvg));
+
     const result = await query(
       `INSERT INTO projects (
         user_id, title, description, task_count, progress, collaborators,
@@ -60,18 +84,31 @@ router.post('/', async (req, res) => {
       RETURNING *`,
       [
         req.user.id, title, description, taskCount || 0, progress || 0, collaborators || 1,
-        color, startDate, endDate, JSON.stringify(phases || []), JSON.stringify(recurringSessions || []),
-        JSON.stringify(mvg || {
-          description: 'Define your minimum viable goal',
-          completed: false,
-          streak: 0,
-          completionHistory: []
-        }),
+        color || 'bg-purple-600', startDate, endDate, 
+        JSON.stringify(safePhases), 
+        JSON.stringify(safeRecurringSessions),
+        JSON.stringify(safeMvg),
         nextAction
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    // Ensure the returned object has arrays where expected, not strings
+    const project = result.rows[0];
+    
+    // Parse JSON strings to objects if they're stored as strings
+    if (typeof project.phases === 'string') {
+      project.phases = JSON.parse(project.phases);
+    }
+    
+    if (typeof project.recurring_sessions === 'string') {
+      project.recurring_sessions = JSON.parse(project.recurring_sessions);
+    }
+    
+    if (typeof project.mvg === 'string') {
+      project.mvg = JSON.parse(project.mvg);
+    }
+
+    res.status(201).json(project);
   } catch (error) {
     console.error('Create project error:', error);
     res.status(500).json({ message: 'Server error' });

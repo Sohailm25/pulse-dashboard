@@ -52,12 +52,36 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     
     try {
       set({ isLoading: true, error: null });
+      
+      // Ensure project data has all required fields before sending to server
+      const safeProjectData = {
+        ...projectData,
+        phases: projectData.phases || [],
+        recurringSessions: projectData.recurringSessions || [],
+        mvg: projectData.mvg || {
+          description: 'Define your minimum viable goal',
+          completed: false,
+          streak: 0,
+          completionHistory: []
+        }
+      };
+      
+      // Ensure MVG has all required fields
+      if (!safeProjectData.mvg.completionHistory) {
+        safeProjectData.mvg.completionHistory = [];
+      }
+      
+      // Ensure MVG has streak field
+      if (safeProjectData.mvg.streak === undefined) {
+        safeProjectData.mvg.streak = 0;
+      }
+      
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(projectData),
+        body: JSON.stringify(safeProjectData),
         credentials: 'include'
       });
       
@@ -67,8 +91,33 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       }
       
       const newProject = await response.json();
+      
+      // Process project data returned from the server
+      const processedProject = {
+        ...newProject,
+        // Ensure these fields are arrays even if they come back as null or undefined
+        phases: Array.isArray(newProject.phases) ? newProject.phases : [],
+        recurringSessions: Array.isArray(newProject.recurring_sessions) 
+          ? newProject.recurring_sessions 
+          : [],
+        // Handle camelCase/snake_case conversion for recurring_sessions
+        ...(newProject.recurring_sessions && { recurringSessions: newProject.recurring_sessions })
+      };
+      
+      // Ensure MVG object has the right structure
+      if (!processedProject.mvg) {
+        processedProject.mvg = {
+          description: 'Define your minimum viable goal',
+          completed: false,
+          streak: 0,
+          completionHistory: []
+        };
+      } else if (!processedProject.mvg.completionHistory) {
+        processedProject.mvg.completionHistory = [];
+      }
+      
       set(state => ({
-        projects: [...state.projects, newProject]
+        projects: [...state.projects, processedProject]
       }));
     } catch (error) {
       console.error('Add project error:', error);
