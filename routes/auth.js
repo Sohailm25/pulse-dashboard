@@ -14,6 +14,9 @@ router.post('/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
+    // Log the registration attempt for debugging
+    console.log('Registration attempt for:', email);
+
     // Check if user already exists
     const existingUser = await query('SELECT * FROM users WHERE email = $1', [email]);
     if (existingUser.rows.length > 0) {
@@ -39,13 +42,19 @@ router.post('/register', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Set the token as an HTTP-only cookie
+    // Set the token as an HTTP-only cookie with enhanced security options
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
     });
 
+    console.log('User registered successfully:', user.email);
+    
     // Return the user info (without password)
     res.status(201).json({
       user: {
@@ -64,6 +73,9 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Log the login attempt for debugging
+    console.log('Login attempt for:', email);
 
     // Find the user
     const result = await query('SELECT * FROM users WHERE email = $1', [email]);
@@ -86,13 +98,19 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Set the token as an HTTP-only cookie
+    // Set the token as an HTTP-only cookie with enhanced security options
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
     });
 
+    console.log('User logged in successfully:', user.email);
+    
     // Return the user info (without password)
     res.json({
       user: {
@@ -109,8 +127,17 @@ router.post('/login', async (req, res) => {
 
 // Logout a user
 router.post('/logout', (req, res) => {
-  // Clear the token cookie
-  res.clearCookie('token');
+  // Clear the token cookie with the same settings as when setting it
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+  });
+  
+  console.log('User logged out successfully');
   res.json({ message: 'Logged out successfully' });
 });
 
@@ -138,6 +165,31 @@ router.get('/me', authenticateToken, async (req, res) => {
     console.error('Get current user error:', error);
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+// Debug endpoint to check cookies and auth status
+router.get('/debug', (req, res) => {
+  // Get all cookies from the request (but don't log sensitive values)
+  const cookieNames = Object.keys(req.cookies || {});
+  
+  // Check if token exists in cookies
+  const hasToken = cookieNames.includes('token');
+  
+  // Return debug info
+  res.json({
+    cookieCount: cookieNames.length,
+    cookieNames,
+    hasAuthToken: hasToken,
+    headers: {
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      'user-agent': req.headers['user-agent'],
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'content-type': req.headers['content-type'],
+    },
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
 });
 
 export default router; 
