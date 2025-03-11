@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 import { CalendarWidget } from '@/components/calendar-widget';
 import { HabitTracker } from '@/components/habits/habit-tracker';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { WorkSession } from '@/components/schedule/work-session';
 import { useProjectStore } from '@/stores/project-store';
 import {
@@ -28,154 +28,133 @@ const mvgStatuses = [
 
 export function DashboardPage() {
   const today = new Date();
-  const { getProjectsForUser, updateProject } = useProjectStore();
+  const { projects, updateProject } = useProjectStore();
   const [activeView, setActiveView] = useState<DashboardView>('holistic');
-  const [sessions, setSessions] = useState<WorkSession[]>([]);
-  
-  const projects = getProjectsForUser();
-  const safeProjects = Array.isArray(projects) ? projects : [];
+  const [isAnyProjectModalOpen, setIsAnyProjectModalOpen] = useState(false);
 
-  const processedProjects = safeProjects.map(project => {
-    if (!project) return null;
-    
-    return {
-      ...project,
-      phases: Array.isArray(project.phases) ? project.phases : [],
-      recurringSessions: Array.isArray(project.recurringSessions) ? project.recurringSessions : [],
-      mvg: project.mvg || {
-        description: 'Define your minimum viable goal',
-        completed: false,
-        streak: 0,
-        completionHistory: []
-      }
-    };
-  }).filter(Boolean);
+  const sortedProjects = [...(projects || [])].sort((a, b) => a.progress - b.progress);
 
-  const calendarEvents = sessions.map(session => ({
-    time: format(session.startTime, 'h:mm a'),
-    title: session.title,
-    category: safeProjects.find(p => p?.id === session.projectId)?.title || '',
-    color: session.projectColor,
-    projectId: session.projectId
-  }));
-
-  const handleSessionAdd = (sessionData: Omit<WorkSession, 'id'>) => {
-    const newSession: WorkSession = {
-      ...sessionData,
-      id: crypto.randomUUID(),
-    };
-    setSessions([...sessions, newSession]);
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (!over) return;
-
-    const projectId = active.id as string;
-    const newStatus = over.id === 'completed';
-    
-    const project = processedProjects.find(p => p.id === projectId);
-    if (!project) return;
-
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const completionHistory = project.mvg.completionHistory || [];
-    const todayIndex = completionHistory.findIndex(h => h.date === today);
-
-    let newHistory = [...completionHistory];
-    if (todayIndex >= 0) {
-      newHistory[todayIndex] = { date: today, completed: newStatus };
-    } else {
-      newHistory = [...newHistory, { date: today, completed: newStatus }];
-    }
-
-    // Calculate streak
-    let streak = 0;
-    if (newStatus) {
-      for (const completion of newHistory.sort((a, b) => b.date.localeCompare(a.date))) {
-        if (completion.completed) streak++;
-        else break;
-      }
-    }
-
-    updateProject({
-      ...project,
-      mvg: {
-        ...project.mvg,
-        completed: newStatus,
-        completionHistory: newHistory,
-        streak
-      }
+  const calendarEvents = projects.flatMap(project => {
+    return project.recurringSessions.flatMap(session => {
+      return session.days.map(day => ({
+        id: `${project.id}-${session.id}-${day}`,
+        title: `${project.title}: ${session.title}`,
+        day,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        color: project.color
+      }));
     });
-  };
-
-  const pendingMvgProjects = processedProjects.filter(project => 
-    project && project.mvg && !project.mvg.completed
-  );
+  });
   
-  const completedMvgProjects = processedProjects.filter(project => 
-    project && project.mvg && project.mvg.completed
-  );
+  useEffect(() => {
+    const handleProjectModalStateChange = (event: CustomEvent<{isOpen: boolean}>) => {
+      setIsAnyProjectModalOpen(event.detail.isOpen);
+    };
+    
+    window.addEventListener('projectModalStateChange', handleProjectModalStateChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('projectModalStateChange', handleProjectModalStateChange as EventListener);
+    };
+  }, []);
 
   return (
-    <div className="pb-24">
+    <div className="space-y-6 relative pb-16">
       <AnimatePresence mode="wait">
         {activeView === 'holistic' && (
           <motion.div
+            key="holistic"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="grid grid-cols-12 gap-6 mobile-grid"
+            transition={{ duration: 0.3 }}
+            className="space-y-6"
           >
-            <div className="col-span-9 space-y-6">
-              <MVGStreak projects={processedProjects} />
+            <MVGStreak projects={projects} />
+            
+            <div>
+              <h2 className="text-xl font-semibold mb-6 dark:text-white">Projects</h2>
               
-              <KanbanProvider onDragEnd={handleDragEnd}>
-                {mvgStatuses.map((status) => (
-                  <KanbanBoard 
-                    key={status.id} 
-                    id={status.id}
-                    className="bg-gray-50/50 border-gray-100 dark:bg-gray-800/50 dark:border-gray-700"
-                  >
-                    <KanbanHeader name={status.name} color={status.color} />
-                    <KanbanCards>
-                      {(status.id === 'completed' ? completedMvgProjects : pendingMvgProjects)
-                        .map((project, index) => (
-                          <KanbanCard
-                            key={project.id}
-                            id={project.id}
-                            name={project.title}
-                            parent={status.id}
-                            index={index}
-                            className="p-0 border-0 shadow-none bg-transparent"
-                          >
-                            <ProjectCard
-                              {...project}
-                              onUpdate={updateProject}
-                              sessions={sessions}
-                              onSessionAdd={handleSessionAdd}
-                              allProjects={processedProjects}
-                            />
-                          </KanbanCard>
-                        ))}
-                    </KanbanCards>
-                  </KanbanBoard>
-                ))}
+              <KanbanProvider>
+                <KanbanBoard
+                  onDragEnd={(event: DragEndEvent) => {
+                    const { active, over } = event;
+                    
+                    if (over && active.id !== over.id) {
+                      const activeId = active.id.toString();
+                      const overId = over.id.toString();
+                      
+                      const activeProject = projects.find(p => p.id === activeId);
+                      const overStatus = mvgStatuses.find(s => s.id === overId);
+                      
+                      if (activeProject && overStatus) {
+                        const updatedProject = {
+                          ...activeProject,
+                          mvg: {
+                            ...activeProject.mvg,
+                            completed: overStatus.id === 'completed'
+                          }
+                        };
+                        
+                        updateProject(updatedProject);
+                      }
+                    }
+                  }}
+                >
+                  <div className="grid grid-cols-2 gap-6">
+                    {mvgStatuses.map((status) => (
+                      <div key={status.id} className="flex flex-col space-y-4">
+                        <KanbanHeader
+                          id={status.id}
+                          className="text-lg font-medium dark:text-white"
+                        >
+                          {status.name}
+                        </KanbanHeader>
+                        
+                        <KanbanCards id={status.id}>
+                          {sortedProjects
+                            .filter(p => (status.id === 'completed' ? p.mvg?.completed : !p.mvg?.completed))
+                            .map(project => (
+                              <KanbanCard id={project.id} key={project.id}>
+                                <ProjectCard 
+                                  {...project} 
+                                  onUpdate={updateProject}
+                                  allProjects={projects}
+                                  onProjectModalOpen={(isOpen) => {
+                                    window.dispatchEvent(
+                                      new CustomEvent('projectModalStateChange', { 
+                                        detail: { isOpen } 
+                                      })
+                                    );
+                                  }}
+                                />
+                              </KanbanCard>
+                            ))}
+                        </KanbanCards>
+                      </div>
+                    ))}
+                  </div>
+                </KanbanBoard>
               </KanbanProvider>
-
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold dark:text-white">Identity Habit Tracker</h2>
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {format(today, 'EEEE, MMMM d')}
-                  </span>
-                </div>
-                <HabitTracker />
-              </div>
             </div>
+            
+            <div className="grid grid-cols-4 gap-6 mobile-grid">
+              <div className="col-span-3 mobile-full">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold dark:text-white">Identity Habit Tracker</h2>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {format(today, 'EEEE, MMMM d')}
+                    </span>
+                  </div>
+                  <HabitTracker />
+                </div>
+              </div>
 
-            <div className="col-span-3 mobile-hidden">
-              <CalendarWidget date={today} events={calendarEvents} />
+              <div className="col-span-3 mobile-hidden">
+                <CalendarWidget date={today} events={calendarEvents} />
+              </div>
             </div>
           </motion.div>
         )}
@@ -188,6 +167,7 @@ export function DashboardPage() {
       <ViewNavigation
         activeView={activeView}
         onViewChange={setActiveView}
+        hidden={isAnyProjectModalOpen}
       />
     </div>
   );

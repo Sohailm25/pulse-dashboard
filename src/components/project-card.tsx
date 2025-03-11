@@ -1,6 +1,6 @@
 import { Check, Clock } from 'lucide-react';
 import { Progress } from './ui/progress';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ProjectModal } from './project-modal';
 import { MVGModal } from './project/mvg-modal';
 import type { Project } from '@/types/project';
@@ -28,6 +28,21 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMVGModalOpen, setIsMVGModalOpen] = useState(false);
+
+  // Notify when modal state changes
+  useEffect(() => {
+    // Set z-index higher when project modal is open
+    document.documentElement.style.setProperty('--project-modal-z', isModalOpen ? '100' : '50');
+    
+    // Dispatch custom event for ViewNavigation to listen to
+    window.dispatchEvent(new CustomEvent('projectModalStateChange', { 
+      detail: { isOpen: isModalOpen || isMVGModalOpen } 
+    }));
+    
+    return () => {
+      document.documentElement.style.setProperty('--project-modal-z', '50');
+    };
+  }, [isModalOpen, isMVGModalOpen]);
 
   const calculateTotalHours = () => {
     let totalMinutes = 0;

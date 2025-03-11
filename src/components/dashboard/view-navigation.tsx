@@ -4,6 +4,7 @@ import { LayoutDashboard, Calendar, BarChart2, PieChart, TrendingUp } from 'luci
 interface ViewNavigationProps {
   activeView: DashboardView;
   onViewChange: (view: DashboardView) => void;
+  hidden?: boolean;
 }
 
 export type DashboardView = 'holistic' | 'daily' | 'weekly' | 'monthly' | 'quarterly';
@@ -20,7 +21,9 @@ const views: Array<{
   { id: 'quarterly', label: 'Quarterly', icon: TrendingUp }
 ];
 
-export function ViewNavigation({ activeView, onViewChange }: ViewNavigationProps) {
+export function ViewNavigation({ activeView, onViewChange, hidden = false }: ViewNavigationProps) {
+  if (hidden) return null;
+  
   return (
     <div className="fixed bottom-0 left-0 right-0 flex justify-center pb-6 z-50 pointer-events-none">
       <motion.div

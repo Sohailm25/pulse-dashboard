@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState, useEffect, ChangeEvent, useRef } from 'react';
 import type { Project, Phase, RecurringSession } from '@/types/project';
 import { PhaseCard } from '../project/phase-card';
@@ -8,7 +8,6 @@ import { ColorPicker } from '../ui/color-picker';
 import { Textarea } from '../ui/textarea';
 import type { WorkSession } from '../schedule/work-session';
 import { startOfWeek, endOfWeek, eachDayOfInterval, format, differenceInMinutes, parse, addDays } from 'date-fns';
-import { ProjectChart } from '../analytics/project-chart';
 import { SessionModal } from '../schedule/session-modal';
 import { Toast, useToast } from '../ui/toast';
 
@@ -37,6 +36,8 @@ export function ProjectModal({
   const { showToast, hideToast, toastProps } = useToast();
   // Add a state to track the last saved project
   const [lastSavedProject, setLastSavedProject] = useState<string>('');
+  // Add state to track expanded phases for accordion UI
+  const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>({});
   
   // Add more detailed logging
   console.log('ProjectModal rendering', { 
@@ -174,6 +175,7 @@ export function ProjectModal({
     console.log('SAVING PROJECT WITH UPDATES:', JSON.stringify(project));
     console.log('Saving recurring sessions:', project.recurringSessions?.length || 0,
                 JSON.stringify(project.recurringSessions));
+    console.log('Saving nextAction:', project.nextAction);
     
     // Ensure we're using the latest state by creating a deep clone
     const updatedProject = JSON.parse(JSON.stringify(project));
@@ -275,37 +277,27 @@ export function ProjectModal({
   const handleSessionUpdate = (sessionId: string, updatedSession: RecurringSession) => {
     console.log('handleSessionUpdate called', { sessionId, updatedSession });
     
-    // Validate the current state of recurringSessions
+    // Validate current recurringSessions
     if (!Array.isArray(project.recurringSessions)) {
       console.error('project.recurringSessions is not an array', project.recurringSessions);
       return;
-    }
-    
-    // Find the session being updated
-    const targetSession = project.recurringSessions.find(session => session.id === sessionId);
-    if (!targetSession) {
-      console.error('Target session not found', { 
-        sessionId, 
-        availableSessions: project.recurringSessions.map(s => s.id) 
-      });
-      return;
-    }
-    
-    // Ensure completions is an array
-    if (!Array.isArray(updatedSession.completions)) {
-      updatedSession.completions = [];
     }
     
     const updatedSessions = project.recurringSessions.map(session =>
       session.id === sessionId ? updatedSession : session
     );
     
-    console.log('Updating recurringSessions', {
-      before: project.recurringSessions.length,
-      after: updatedSessions.length
-    });
+    console.log('Updated sessions array:', updatedSessions);
     
     handleChange('recurringSessions', updatedSessions);
+  };
+
+  // Toggle phase expansion for accordion UI
+  const togglePhaseExpansion = (phaseId: string) => {
+    setExpandedPhases(prev => ({
+      ...prev,
+      [phaseId]: !prev[phaseId]
+    }));
   };
 
   const addRecurringSession = () => {
@@ -357,25 +349,6 @@ export function ProjectModal({
     );
   };
 
-  // Calculate metrics for chart
-  const chartData = {
-    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-    datasets: [{
-      label: 'Progress',
-      data: [
-        Math.max(10, Math.min(30, calculateProgress())),
-        Math.max(20, Math.min(45, calculateProgress())),
-        Math.max(40, Math.min(60, calculateProgress())),
-        calculateProgress()
-      ],
-      borderColor: 'rgb(124, 58, 237)',
-      backgroundColor: 'rgba(124, 58, 237, 0.1)',
-      fill: true,
-      tension: 0.4,
-      borderWidth: 2
-    }]
-  };
-
   // Function to dump the current state to console for debugging
   const dumpStateToConsole = () => {
     console.log('🔍 DEBUG - Current Project State:');
@@ -395,7 +368,7 @@ export function ProjectModal({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={handleClose} />
       
       <motion.div
@@ -437,6 +410,7 @@ export function ProjectModal({
         
         <div className="p-6 overflow-y-auto h-full">
           <div className="grid grid-cols-12 gap-6">
+            {/* Left column for basic details */}
             <div className="col-span-7 space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -544,14 +518,8 @@ export function ProjectModal({
               </div>
             </div>
             
+            {/* Right column for phases */}
             <div className="col-span-5 space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 p-4">
-                <h3 className="font-medium mb-4 dark:text-white">Progress</h3>
-                <div className="h-[200px]">
-                  <ProjectChart data={chartData} />
-                </div>
-              </div>
-              
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-medium dark:text-white">Phases</h3>
@@ -563,48 +531,81 @@ export function ProjectModal({
                     Add Phase
                   </button>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {project.phases.map(phase => (
-                    <PhaseCard
-                      key={phase.id}
-                      phase={phase}
-                      onUpdate={updatedPhase => handlePhaseUpdate(phase.id, updatedPhase)}
-                    />
+                    <div 
+                      key={phase.id} 
+                      className="bg-white dark:bg-gray-700 rounded-lg border dark:border-gray-600 overflow-hidden"
+                    >
+                      <div 
+                        className="p-3 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600"
+                        onClick={() => togglePhaseExpansion(phase.id)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={phase.completed}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handlePhaseUpdate(phase.id, { ...phase, completed: e.target.checked });
+                            }}
+                            className="rounded text-primary focus:ring-primary/20"
+                          />
+                          <h4 className="font-medium dark:text-white">{phase.title}</h4>
+                        </div>
+                        {expandedPhases[phase.id] ? (
+                          <ChevronUp className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                        )}
+                      </div>
+                      
+                      {expandedPhases[phase.id] && (
+                        <div className="p-3 border-t dark:border-gray-600">
+                          <PhaseCard
+                            phase={phase}
+                            onUpdate={updatedPhase => handlePhaseUpdate(phase.id, updatedPhase)}
+                          />
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium dark:text-white">Recurring Work Sessions</h3>
-                  <button
-                    onClick={addRecurringSession}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Session
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {Array.isArray(project.recurringSessions) && project.recurringSessions.length > 0 ? (
-                    project.recurringSessions.map(session => {
-                      console.log('Rendering session:', session.id, session.title);
-                      return (
-                        <RecurringSessionCard
-                          key={session.id}
-                          session={session}
-                          onUpdate={updatedSession => handleSessionUpdate(session.id, updatedSession)}
-                          onDelete={deleteRecurringSession}
-                        />
-                      );
-                    })
-                  ) : (
-                    <div className="text-gray-500 dark:text-gray-400 text-center p-4">
-                      No recurring sessions yet. Add one to get started.
+            </div>
+          </div>
+          
+          {/* Bottom section for recurring sessions */}
+          <div className="mt-8 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium dark:text-white">Recurring Work Sessions</h3>
+              <button
+                onClick={addRecurringSession}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90"
+              >
+                <Plus className="w-4 h-4" />
+                Add Session
+              </button>
+            </div>
+            <div className="flex flex-wrap justify-center gap-4">
+              {Array.isArray(project.recurringSessions) && project.recurringSessions.length > 0 ? (
+                project.recurringSessions.map(session => {
+                  console.log('Rendering session:', session.id, session.title);
+                  return (
+                    <div key={session.id} className="w-full md:w-[calc(50%-0.5rem)] lg:w-[calc(33.333%-0.667rem)]">
+                      <RecurringSessionCard
+                        session={session}
+                        onUpdate={updatedSession => handleSessionUpdate(session.id, updatedSession)}
+                        onDelete={deleteRecurringSession}
+                      />
                     </div>
-                  )}
+                  );
+                })
+              ) : (
+                <div className="text-gray-500 dark:text-gray-400 text-center p-4 w-full">
+                  No recurring sessions yet. Add one to get started.
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
