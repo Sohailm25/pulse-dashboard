@@ -4,7 +4,7 @@ import { Clock, Target, TrendingUp, Brain, Heart, Dumbbell } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store';
 import { useHabitStore } from '@/stores/habit-store';
 import { startOfWeek, endOfWeek, eachDayOfInterval, format, differenceInMinutes, parse, addDays } from 'date-fns';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 console.log('AnalyticsPage component loaded');
 
@@ -28,30 +28,52 @@ export function AnalyticsPage() {
   
   const projects = getProjectsForUser();
   const habits = getHabitsForUser();
+  
+  // Track last processed projects to prevent unnecessary reprocessing
+  const lastProcessedProjects = useRef<string>('');
+  
   const [colorVars, setColorVars] = useState<Record<string, string>>({});
   const [projectData, setProjectData] = useState<any>({ labels: [], datasets: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   
   // Add a ref to track if colorVars has been populated - prevents infinite loops
-  const colorVarsPopulated = useRef(false);
+  const processedProjectIds = useRef<string[]>([]);
 
-  console.log('Projects:', projects.length);
-  console.log('Habits:', habits.length);
+  console.log(`Projects count: ${projects.length}, Processed IDs count: ${processedProjectIds.current.length}`);
+  console.log(`Habits count: ${habits.length}`);
+  
+  // Generate a stable representation of projects for comparison
+  const projectsSignature = useMemo(() => {
+    return projects.map(p => `${p.id}-${p.color}`).sort().join('|');
+  }, [projects]);
+  
+  console.log(`Current projects signature: ${projectsSignature}`);
+  console.log(`Last processed projects signature: ${lastProcessedProjects.current}`);
 
   // Extract color values from CSS variables safely in useEffect
   useEffect(() => {
     console.log('Starting colorVars useEffect');
+    console.log(`---> Project count: ${projects.length}`);
+    console.log(`---> ProcessedProjectIds count: ${processedProjectIds.current.length}`);
+    console.log(`---> ProjectsSignature: ${projectsSignature}`);
+    console.log(`---> lastProcessedProjects.current: ${lastProcessedProjects.current}`);
+    
+    // Skip if the exact same projects have already been processed
+    if (projectsSignature === lastProcessedProjects.current && Object.keys(colorVars).length > 0) {
+      console.log('SKIPPING: Same projects already processed');
+      return;
+    }
+    
     if (typeof document === 'undefined') {
       console.log('Document is undefined, skipping colorVars calculation');
       return;
     }
     
-    // Skip if we've already populated colorVars and they match the project count
-    // This prevents infinite re-renders
-    if (colorVarsPopulated.current && Object.keys(colorVars).length >= projects.length) {
-      console.log('ColorVars already populated, skipping');
-      return;
+    // Reset the processed IDs if the signature changed
+    if (projectsSignature !== lastProcessedProjects.current) {
+      console.log('Projects changed, resetting processed IDs');
+      processedProjectIds.current = [];
     }
     
     const vars: Record<string, string> = {};
@@ -60,44 +82,65 @@ export function AnalyticsPage() {
       
       // If no projects, set an empty object and return
       if (!projects.length) {
+        console.log('No projects to process');
         setColorVars({});
-        colorVarsPopulated.current = true;
+        lastProcessedProjects.current = projectsSignature;
         return;
       }
       
+      // Get all unique color values
+      const uniqueColors = new Set<string>();
       projects.forEach(project => {
-        if (!project.color) {
-          console.log(`Project ${project.id} has no color defined`);
-          return;
+        if (project.color) {
+          uniqueColors.add(project.color);
         }
-        
-        const colorParts = project.color.split('-');
+      });
+      
+      console.log(`Found ${uniqueColors.size} unique colors`);
+      
+      // Process each unique color only once
+      uniqueColors.forEach(color => {
+        const colorParts = color.split('-');
         if (colorParts.length >= 2) {
           const colorType = colorParts[1]; // e.g., "purple" from "bg-purple-600"
           console.log(`Getting color var for ${colorType}-600`);
           const colorVar = getComputedStyle(document.documentElement)
             .getPropertyValue(`--${colorType}-600`)
             .trim();
-          vars[project.color] = colorVar || '0, 0, 0'; // Default to black if not found
-          console.log(`Set color var for ${project.color}: ${colorVar}`);
+          vars[color] = colorVar || '0, 0, 0'; // Default to black if not found
+          console.log(`Set color var for ${color}: ${colorVar}`);
         } else {
-          console.log(`Invalid color format: ${project.color}`);
+          console.log(`Invalid color format: ${color}`);
         }
       });
       
-      console.log('Setting colorVars:', Object.keys(vars));
-      setColorVars(vars);
-      colorVarsPopulated.current = true;
+      // Update processed IDs
+      processedProjectIds.current = projects.map(p => p.id);
+      
+      // Only set state if the colors are different
+      const existingColorKeys = Object.keys(colorVars).sort().join(',');
+      const newColorKeys = Object.keys(vars).sort().join(',');
+      
+      if (existingColorKeys !== newColorKeys) {
+        console.log('Setting colorVars:', Object.keys(vars));
+        setColorVars(vars);
+      } else {
+        console.log('No change in colorVars, skipping state update');
+      }
+      
+      // Update last processed projects
+      lastProcessedProjects.current = projectsSignature;
     } catch (error) {
       console.error('Error accessing CSS variables:', error);
       setHasError(true);
     }
     console.log('Completed colorVars useEffect');
-  }, [projects]); // Only depend on projects
+  }, [projectsSignature, colorVars]); // Only depend on projectsSignature
 
   // Calculate daily (non-cumulative) time spent per project
   const calculateTimeSpent = () => {
     console.log('calculateTimeSpent called');
+    console.log(`Processing ${projects.length} projects with ${Object.keys(colorVars).length} colors`);
     try {
       const today = new Date();
       const weekStart = startOfWeek(today);
@@ -111,7 +154,7 @@ export function AnalyticsPage() {
       }
 
       return projects.map(project => {
-        console.log(`Processing project: ${project.title}`);
+        console.log(`Processing project: ${project.title} (${project.id})`);
         // Calculate daily hours (non-cumulative)
         const dailyData = weekDays.map(day => {
           const dateStr = format(day, 'yyyy-MM-dd');
@@ -144,7 +187,7 @@ export function AnalyticsPage() {
           return Math.round((dailyMinutes / 60) * 100) / 100; // Convert to hours and round to 2 decimals
         });
 
-        console.log(`Daily data for ${project.title}:`, dailyData);
+        console.log(`Daily data for ${project.title} (${project.id}):`, dailyData);
 
         // Calculate cumulative hours
         const cumulativeData = dailyData.reduce((acc: number[], hours: number) => {
@@ -153,11 +196,11 @@ export function AnalyticsPage() {
           return acc;
         }, []);
 
-        console.log(`Cumulative data for ${project.title}:`, cumulativeData);
+        console.log(`Cumulative data for ${project.title} (${project.id}):`, cumulativeData);
 
         // Use defined color for project or fallback
         const colorVar = colorVars[project.color] || '0, 0, 0'; // Default to black if color not found
-        console.log(`Using color ${colorVar} for project ${project.title}`);
+        console.log(`Using color ${colorVar} for project ${project.title} (${project.id})`);
 
         return {
           label: project.title,
@@ -175,12 +218,17 @@ export function AnalyticsPage() {
     }
   };
 
+  // Store previous projectData for comparison to prevent infinite updates
+  const prevProjectData = useRef<string>('');
+  
   // Calculate project data in useEffect to avoid doing it during render
   useEffect(() => {
     console.log('Starting projectData useEffect');
+    console.log(`---> ColorVars keys: ${Object.keys(colorVars)}`);
+    console.log(`---> ProjectsSignature: ${projectsSignature}`);
     
-    // Skip if colorVars is empty
-    if (!colorVarsPopulated.current || Object.keys(colorVars).length === 0) {
+    // Skip if colorVars is empty or we're still loading projects
+    if (Object.keys(colorVars).length === 0) {
       console.log('No colorVars available yet, skipping projectData calculation');
       return;
     }
@@ -198,8 +246,18 @@ export function AnalyticsPage() {
         datasets
       };
       
-      console.log('Setting projectData with datasets:', data.datasets.length);
-      setProjectData(data);
+      // Convert to string for comparison
+      const newProjectDataString = JSON.stringify(data);
+      
+      // Only update state if data has changed
+      if (newProjectDataString !== prevProjectData.current) {
+        console.log(`Setting projectData with datasets: ${data.datasets.length}`);
+        setProjectData(data);
+        prevProjectData.current = newProjectDataString;
+      } else {
+        console.log('Project data unchanged, skipping update');
+      }
+      
       setIsLoading(false);
     } catch (error) {
       console.error('Error setting project data:', error);
@@ -207,7 +265,7 @@ export function AnalyticsPage() {
       setIsLoading(false);
     }
     console.log('Completed projectData useEffect');
-  }, [colorVars]); // Only depend on colorVars
+  }, [colorVars, projectsSignature]); // Only depend on colorVars and projectsSignature
 
   // Calculate total hours this week from completed sessions
   const calculateTotalHours = () => {
@@ -256,10 +314,11 @@ export function AnalyticsPage() {
     }
   };
 
-  const totalHoursThisWeek = calculateTotalHours();
+  // Memoize these calculations to prevent recalculation on every render
+  const totalHoursThisWeek = useMemo(() => calculateTotalHours(), [projects]);
   console.log(`Total hours this week: ${totalHoursThisWeek}`);
   
-  const completedSessions = projects.reduce((total, project) => {
+  const completedSessions = useMemo(() => projects.reduce((total, project) => {
     if (!project.recurringSessions || !Array.isArray(project.recurringSessions)) {
       return total;
     }
@@ -271,16 +330,16 @@ export function AnalyticsPage() {
       
       return sessionTotal + (session.completions.filter((c: Completion) => c.completed)?.length || 0);
     }, 0);
-  }, 0);
+  }, 0), [projects]);
   console.log(`Completed sessions: ${completedSessions}`);
 
-  const totalSessions = projects.reduce((total, project) => {
+  const totalSessions = useMemo(() => projects.reduce((total, project) => {
     if (!project.recurringSessions || !Array.isArray(project.recurringSessions)) {
       return total;
     }
     
     return total + project.recurringSessions.length * 7;
-  }, 0);
+  }, 0), [projects]);
   console.log(`Total sessions: ${totalSessions}`);
 
   // If there's an error, show error message
@@ -340,7 +399,7 @@ export function AnalyticsPage() {
                   title="Active projects" 
                   value={projects.length.toString()}
                   icon={Target}
-                  description="2 projects in progress"
+                  description="Projects in progress"
                   trend={0}
                 />
               </div>
@@ -413,6 +472,10 @@ export function AnalyticsPage() {
           )}
         </>
       )}
+      
+      <div className="text-xs text-gray-400 dark:text-gray-600 mt-4">
+        Render count: {renderCount.current}
+      </div>
     </div>
   );
 }
