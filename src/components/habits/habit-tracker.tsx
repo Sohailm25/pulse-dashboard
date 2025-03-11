@@ -206,10 +206,13 @@ function StreakVisualization({ habit }: { habit: Habit }) {
     index: i
   }));
   
+  // Ensure completionHistory exists
+  const safeCompletionHistory = habit.completionHistory || [];
+  
   return (
     <div className="flex gap-1">
       {days.map(({ date, index }) => {
-        const completion = habit.completionHistory.find(h => h.date === date);
+        const completion = safeCompletionHistory.find(h => h?.date === date);
         const isTodays = date === format(today, 'yyyy-MM-dd');
         
         return (

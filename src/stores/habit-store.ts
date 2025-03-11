@@ -39,7 +39,15 @@ const useHabitStore = create<HabitStore>()((set, get) => ({
       }
       
       const data = await response.json();
-      set({ habits: data });
+      
+      // Ensure each habit has required fields
+      const processedHabits = data.map((habit) => ({
+        ...habit,
+        completionHistory: habit.completionHistory || [],
+        streak: habit.streak || 0
+      }));
+      
+      set({ habits: processedHabits });
     } catch (error) {
       console.error('Fetch habits error:', error);
       set({ error: (error as Error).message });
@@ -69,8 +77,16 @@ const useHabitStore = create<HabitStore>()((set, get) => ({
       }
       
       const newHabit = await response.json();
+      
+      // Ensure the new habit has a completionHistory array and other required fields
+      const processedHabit = {
+        ...newHabit,
+        completionHistory: newHabit.completionHistory || [],
+        streak: newHabit.streak || 0
+      };
+      
       set(state => ({
-        habits: [...state.habits, newHabit]
+        habits: [...state.habits, processedHabit]
       }));
     } catch (error) {
       console.error('Add habit error:', error);

@@ -57,10 +57,19 @@ export function MonthlyView() {
       const categoryHabits = safeHabits.filter(h => h?.category === category);
       const dailyCompletions = daysInMonth.map(day => {
         const dateStr = format(day, 'yyyy-MM-dd');
-        const completed = categoryHabits.reduce((acc, habit) => 
-          acc + (habit?.completionHistory || []).find(h => h.date === dateStr)?.completed ? 1 : 0, 0
-        );
-        return (completed / categoryHabits.length) * 100;
+        
+        // Safely calculate completed habits for this day
+        const completed = categoryHabits.reduce((acc, habit) => {
+          // Ensure the habit has a completionHistory array
+          const habitCompletions = habit?.completionHistory || [];
+          // Check if any completion matches this day and is completed
+          const isCompletedToday = habitCompletions.some(h => h?.date === dateStr && h.completed);
+          return acc + (isCompletedToday ? 1 : 0);
+        }, 0);
+        
+        // Avoid division by zero
+        const categoryHabitCount = Math.max(categoryHabits.length, 1);
+        return (completed / categoryHabitCount) * 100;
       });
 
       return {

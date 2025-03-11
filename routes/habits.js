@@ -12,7 +12,32 @@ router.use(authenticateToken);
 router.get('/', async (req, res) => {
   try {
     const result = await query('SELECT * FROM habits WHERE user_id = $1 ORDER BY created_at DESC', [req.user.id]);
-    res.json(result.rows);
+    
+    // Process habits to ensure they have the correct structure
+    const processedHabits = result.rows.map(habit => {
+      // Convert completion_history (snake_case) to completionHistory (camelCase) and ensure it's an array
+      let completionHistory = [];
+      if (habit.completion_history) {
+        try {
+          // If it's a string, parse it
+          if (typeof habit.completion_history === 'string') {
+            completionHistory = JSON.parse(habit.completion_history);
+          } else {
+            // Otherwise, assume it's already an object
+            completionHistory = habit.completion_history;
+          }
+        } catch (e) {
+          console.error('Error parsing completion_history:', e);
+        }
+      }
+      
+      return {
+        ...habit,
+        completionHistory: Array.isArray(completionHistory) ? completionHistory : []
+      };
+    });
+    
+    res.json(processedHabits);
   } catch (error) {
     console.error('Get habits error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -45,6 +70,8 @@ router.post('/', async (req, res) => {
       clearFramework
     } = req.body;
 
+    console.log('Creating new habit:', { name, category, identity });
+
     const result = await query(
       `INSERT INTO habits (
         user_id, name, category, identity, streak, completed, completion_history, clear_framework
@@ -55,7 +82,28 @@ router.post('/', async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    // Process the habit for frontend compatibility
+    const habit = result.rows[0];
+    
+    // Ensure completionHistory is always an array in the response
+    let completionHistory = [];
+    try {
+      if (typeof habit.completion_history === 'string') {
+        completionHistory = JSON.parse(habit.completion_history);
+      } else if (habit.completion_history) {
+        completionHistory = habit.completion_history;
+      }
+    } catch (e) {
+      console.error('Error parsing completion_history:', e);
+    }
+    
+    const processedHabit = {
+      ...habit,
+      completionHistory: Array.isArray(completionHistory) ? completionHistory : []
+    };
+    
+    console.log('Habit created successfully:', processedHabit.id);
+    res.status(201).json(processedHabit);
   } catch (error) {
     console.error('Create habit error:', error);
     res.status(500).json({ message: 'Server error' });
