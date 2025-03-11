@@ -174,8 +174,6 @@ export function ProjectModal({
     return Math.round(totalMinutes / 60);
   };
 
-  const dialogRef = useRef<HTMLDivElement>(null);
-  
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
