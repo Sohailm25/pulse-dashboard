@@ -8,6 +8,7 @@ import fs from 'fs';
 import authRoutes from './routes/auth.js';
 import projectRoutes from './routes/projects.js';
 import habitRoutes from './routes/habits.js';
+import pool from './db/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -15,6 +16,37 @@ console.log('Environment loaded');
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('PORT:', process.env.PORT);
 console.log('Database connection available:', !!process.env.DATABASE_URL);
+
+// Verify database tables exist
+const verifyDatabaseTables = async () => {
+  try {
+    console.log('Verifying database tables...');
+    const tablesResult = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('users', 'projects', 'habits')
+    `);
+    
+    const tables = tablesResult.rows.map(row => row.table_name);
+    console.log('Found database tables:', tables);
+    
+    if (tables.length < 3) {
+      console.log('Some required tables are missing. Running database initialization...');
+      // Import and run the initialization script
+      const initDatabase = (await import('./db/init-tables.js')).default;
+      await initDatabase();
+    } else {
+      console.log('All required tables exist in the database');
+    }
+  } catch (error) {
+    console.error('Error verifying database tables:', error);
+    console.log('Running database initialization due to error...');
+    // Import and run the initialization script
+    const initDatabase = (await import('./db/init-tables.js')).default;
+    await initDatabase();
+  }
+};
 
 // Initialize Express app
 const app = express();
@@ -87,6 +119,57 @@ app.get('/debug/static', (req, res) => {
   } catch (error) {
     console.error('Error checking static files:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Database info endpoint for debugging
+app.get('/debug/database', async (req, res) => {
+  try {
+    // Check connection
+    const connectionTest = await pool.query('SELECT NOW()');
+    
+    // Check tables
+    const tablesResult = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+    `);
+    
+    // Count records in each table
+    const tableStats = [];
+    for (const table of tablesResult.rows) {
+      try {
+        const countResult = await pool.query(`SELECT COUNT(*) FROM ${table.table_name}`);
+        tableStats.push({
+          table: table.table_name,
+          count: parseInt(countResult.rows[0].count)
+        });
+      } catch (err) {
+        tableStats.push({
+          table: table.table_name,
+          error: err.message
+        });
+      }
+    }
+    
+    res.json({
+      connection: {
+        success: true,
+        timestamp: connectionTest.rows[0].now
+      },
+      tables: tablesResult.rows.map(row => row.table_name),
+      tableStats,
+      databaseUrl: process.env.DATABASE_URL ? 
+        process.env.DATABASE_URL.substring(0, 20) + '...' : 'Not available'
+    });
+  } catch (error) {
+    console.error('Error checking database:', error);
+    res.status(500).json({ 
+      error: error.message,
+      connection: { success: false },
+      databaseUrl: process.env.DATABASE_URL ? 
+        process.env.DATABASE_URL.substring(0, 20) + '...' : 'Not available'
+    });
   }
 });
 
@@ -205,6 +288,7 @@ if (fs.existsSync(publicPath)) {
     <p>Please try again in a few minutes, or check the health status of our application.</p>
     <a href="/health" class="button">Check Health Status</a>
     <a href="/debug/static" class="button" style="margin-left: 10px;">Debug Info</a>
+    <a href="/debug/database" class="button" style="margin-left: 10px;">Database Info</a>
     <div class="status">
       <p>If you continue to experience issues, please contact support.</p>
     </div>
@@ -242,8 +326,22 @@ app.get('*', (req, res) => {
   }
 });
 
+// Start the server - wrapped to ensure database tables are created first
+const startServer = async () => {
+  try {
+    // Verify database tables exist
+    await verifyDatabaseTables();
+    
+    // Start the server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Server URL: http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
 // Start the server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Server URL: http://localhost:${PORT}`);
-}); 
+startServer(); 

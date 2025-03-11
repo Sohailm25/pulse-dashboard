@@ -107,4 +107,118 @@ if (process.env.NODE_ENV) {
   console.warn('NODE_ENV is not set, will default to development');
 }
 
-console.log('Environment check complete'); 
+console.log('Environment check complete');
+
+// Initialize database tables
+console.log('Initializing database tables...');
+try {
+  // Instead of importing and running the init.js file directly (which would close the pool),
+  // we'll execute the database initialization script from here
+  const dbInitPath = path.join(rootDir, 'db', 'init-tables.js');
+  
+  // Run init-tables.js if it exists, otherwise create it
+  if (fs.existsSync(dbInitPath)) {
+    console.log('Found database initialization script, executing...');
+    // Import will execute the file
+    await import(dbInitPath);
+  } else {
+    console.log('Creating database initialization script...');
+    
+    // Create the script
+    const initScript = `
+import pkg from 'pg';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const { Pool } = pkg;
+
+const initDatabase = async () => {
+  console.log('Starting database initialization...');
+  
+  // Create a new pool for database initialization
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+  
+  try {
+    // Create users table
+    await pool.query(\`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    \`);
+    console.log('Users table created or verified');
+
+    // Create projects table
+    await pool.query(\`
+      CREATE TABLE IF NOT EXISTS projects (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        task_count INTEGER DEFAULT 0,
+        progress INTEGER DEFAULT 0,
+        collaborators INTEGER DEFAULT 1,
+        color VARCHAR(50) NOT NULL,
+        start_date TIMESTAMP WITH TIME ZONE,
+        end_date TIMESTAMP WITH TIME ZONE,
+        phases JSONB DEFAULT '[]'::JSONB,
+        recurring_sessions JSONB DEFAULT '[]'::JSONB,
+        mvg JSONB DEFAULT '{"description": "Define your minimum viable goal", "completed": false, "streak": 0, "completionHistory": []}'::JSONB,
+        next_action TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    \`);
+    console.log('Projects table created or verified');
+
+    // Create habits table
+    await pool.query(\`
+      CREATE TABLE IF NOT EXISTS habits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        identity TEXT,
+        streak INTEGER DEFAULT 0,
+        completed BOOLEAN DEFAULT FALSE,
+        completion_history JSONB DEFAULT '[]'::JSONB,
+        clear_framework TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    \`);
+    console.log('Habits table created or verified');
+
+    console.log('All tables initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database tables:', error);
+  } finally {
+    // Release the client back to the pool
+    await pool.end();
+  }
+};
+
+// Run the function
+initDatabase().catch(err => {
+  console.error('Failed to initialize database:', err);
+});
+`;
+    fs.writeFileSync(dbInitPath, initScript);
+    console.log('Database initialization script created');
+    
+    // Execute the script
+    await import(dbInitPath);
+  }
+  
+  console.log('Database tables initialization complete');
+} catch (error) {
+  console.error('Error during database initialization:', error);
+} 
