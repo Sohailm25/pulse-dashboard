@@ -42,6 +42,7 @@ export default {
     },
   },
   plugins: [
-    require('@tailwindcss/typography'),
+    // Remove Typography plugin for now since it's not installed
+    // require('@tailwindcss/typography'),
   ],
 };
