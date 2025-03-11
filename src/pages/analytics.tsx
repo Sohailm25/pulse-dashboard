@@ -36,6 +36,7 @@ export function AnalyticsPage() {
   const [projectData, setProjectData] = useState<any>({ labels: [], datasets: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [componentError, setComponentError] = useState<string | null>(null);
   
   // Add a ref to track if colorVars has been populated - prevents infinite loops
   const processedProjectIds = useRef<string[]>([]);
@@ -85,6 +86,7 @@ export function AnalyticsPage() {
         console.log('No projects to process');
         setColorVars({});
         lastProcessedProjects.current = projectsSignature;
+        setIsLoading(false);
         return;
       }
       
@@ -133,6 +135,8 @@ export function AnalyticsPage() {
     } catch (error) {
       console.error('Error accessing CSS variables:', error);
       setHasError(true);
+      setComponentError('Error accessing CSS variables');
+      setIsLoading(false);
     }
     console.log('Completed colorVars useEffect');
   }, [projectsSignature, colorVars]); // Only depend on projectsSignature
@@ -144,8 +148,8 @@ export function AnalyticsPage() {
     try {
       const today = new Date();
       const weekStart = startOfWeek(today);
-      const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-      console.log('Week days:', weekDays.map(d => format(d, 'yyyy-MM-dd')));
+      const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map(d => format(d, 'yyyy-MM-dd'));
+      console.log('Week days:', weekDays);
 
       // If no projects or no colorVars, return empty array
       if (!projects.length || !Object.keys(colorVars).length) {
@@ -157,7 +161,7 @@ export function AnalyticsPage() {
         console.log(`Processing project: ${project.title} (${project.id})`);
         // Calculate daily hours (non-cumulative)
         const dailyData = weekDays.map(day => {
-          const dateStr = format(day, 'yyyy-MM-dd');
+          const dateStr = day;
           let dailyMinutes = 0;
 
           if (!project.recurringSessions || !Array.isArray(project.recurringSessions)) {
@@ -174,8 +178,8 @@ export function AnalyticsPage() {
             const completion = session.completions.find((c: Completion) => c.date === dateStr);
             if (completion?.completed) {
               try {
-                const startTime = parse(session.startTime, 'HH:mm', day);
-                const endTime = parse(session.endTime, 'HH:mm', day);
+                const startTime = parse(session.startTime, 'HH:mm', new Date(dateStr));
+                const endTime = parse(session.endTime, 'HH:mm', new Date(dateStr));
                 dailyMinutes += differenceInMinutes(endTime, startTime);
                 console.log(`Added ${differenceInMinutes(endTime, startTime)} minutes for ${session.title} on ${dateStr}`);
               } catch (error) {
@@ -214,6 +218,7 @@ export function AnalyticsPage() {
       });
     } catch (error) {
       console.error('Error calculating time spent:', error);
+      setComponentError('Error calculating time spent');
       return [];
     }
   };
@@ -262,10 +267,24 @@ export function AnalyticsPage() {
     } catch (error) {
       console.error('Error setting project data:', error);
       setHasError(true);
+      setComponentError('Error calculating project data');
       setIsLoading(false);
     }
     console.log('Completed projectData useEffect');
   }, [colorVars, projectsSignature]); // Only depend on colorVars and projectsSignature
+
+  // Ensure we're not stuck in loading state
+  useEffect(() => {
+    // Set a timeout to exit loading state after 5 seconds just in case
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.log('Loading timeout reached - forcing exit from loading state');
+        setIsLoading(false);
+      }
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   // Calculate total hours this week from completed sessions
   const calculateTotalHours = () => {
@@ -310,6 +329,7 @@ export function AnalyticsPage() {
       return result;
     } catch (error) {
       console.error('Error calculating total hours:', error);
+      setComponentError('Error calculating total hours');
       return 0;
     }
   };
@@ -348,7 +368,7 @@ export function AnalyticsPage() {
       <div className="p-6 bg-white dark:bg-gray-800 rounded-xl">
         <h1 className="text-xl font-bold mb-4 dark:text-white">Analytics</h1>
         <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg">
-          There was an error loading analytics data. Please try refreshing the page.
+          There was an error loading analytics data: {componentError || 'Please try refreshing the page.'}
         </div>
       </div>
     );
@@ -359,21 +379,34 @@ export function AnalyticsPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-bold dark:text-white">Analytics</h1>
       
+      {console.log('Rendering analytics content...')}
+      {console.log(`Loading state: ${isLoading}, Projects length: ${projects.length}`)}
+      
       {isLoading && projects.length > 0 ? (
         <div className="p-6 bg-white dark:bg-gray-800 rounded-xl text-center">
+          {console.log('Rendering loading state')}
           <p className="text-gray-600 dark:text-gray-400">Loading analytics data...</p>
         </div>
       ) : (
         <>
+          {console.log('Rendering main content')}
           {projects.length === 0 ? (
             <div className="p-6 bg-white dark:bg-gray-800 rounded-xl">
+              {console.log('Rendering empty projects state')}
               <p className="text-gray-600 dark:text-gray-400 text-center">
                 No projects found. Create a project to see analytics.
               </p>
             </div>
           ) : (
             <>
+              {console.log('Rendering project data')}
+              {console.log(`Stats data: 
+                Hours: ${totalHoursThisWeek}, 
+                Sessions: ${completedSessions}/${totalSessions}
+              `)}
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {console.log('Rendering StatsCards')}
                 <StatsCard 
                   title="Hours this week" 
                   value={totalHoursThisWeek.toString()}
@@ -406,11 +439,22 @@ export function AnalyticsPage() {
               
               {/* Project Chart */}
               <div className="p-6 bg-white dark:bg-gray-800 rounded-xl">
+                {console.log('Rendering Project Chart section')}
+                {console.log(`ProjectData datasets: ${projectData.datasets?.length || 0}`)}
+                
                 <h2 className="text-lg font-medium mb-4 dark:text-white">Cumulative Hours per Project</h2>
-                {projectData.datasets.length > 0 ? (
-                  <ProjectChart data={projectData} />
+                {projectData.datasets?.length > 0 ? (
+                  <>
+                    {console.log('Rendering ProjectChart component')}
+                    <div className="h-[300px] relative">
+                      <div className="absolute inset-0">
+                        <ProjectChart data={projectData} />
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="h-[300px] flex items-center justify-center">
+                    {console.log('Rendering no project data message')}
                     <p className="text-gray-500 dark:text-gray-400">No time data available for any projects</p>
                   </div>
                 )}
@@ -419,6 +463,7 @@ export function AnalyticsPage() {
               {/* Habit Stats */}
               {habits.length > 0 && (
                 <div className="p-6 bg-white dark:bg-gray-800 rounded-xl">
+                  {console.log('Rendering Habits section')}
                   <h2 className="text-lg font-medium mb-4 dark:text-white">Identity Habits</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <div className="space-y-4">
@@ -474,7 +519,7 @@ export function AnalyticsPage() {
       )}
       
       <div className="text-xs text-gray-400 dark:text-gray-600 mt-4">
-        Render count: {renderCount.current}
+        Render count: {renderCount.current} | {isLoading ? 'Loading...' : 'Loaded'} | Errors: {componentError || 'None'}
       </div>
     </div>
   );

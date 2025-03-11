@@ -10,6 +10,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
+import { useEffect, useState } from 'react';
 
 ChartJS.register(
   CategoryScale,
@@ -38,6 +39,29 @@ interface ProjectChartProps {
 }
 
 export function ProjectChart({ data }: ProjectChartProps) {
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!data || !data.datasets || data.datasets.length === 0) {
+      console.warn('ProjectChart received invalid data:', data);
+      setChartError('Invalid chart data');
+      return;
+    }
+
+    if (!data.labels || data.labels.length === 0) {
+      console.warn('ProjectChart received invalid labels:', data.labels);
+      setChartError('Invalid chart labels');
+      return;
+    }
+
+    setChartError(null);
+  }, [data]);
+
   const options = {
     responsive: true,
     maintainAspectRatio: false,
@@ -82,9 +106,34 @@ export function ProjectChart({ data }: ProjectChartProps) {
     }
   };
 
-  return (
-    <div className="h-[300px]">
-      <Line options={options} data={data} />
-    </div>
-  );
+  if (chartError) {
+    return (
+      <div className="h-[300px] flex items-center justify-center text-red-500">
+        <p>Error rendering chart: {chartError}</p>
+      </div>
+    );
+  }
+
+  if (!isClient) {
+    return (
+      <div className="h-[300px] flex items-center justify-center">
+        <p className="text-gray-400">Loading chart...</p>
+      </div>
+    );
+  }
+
+  try {
+    return (
+      <div className="h-[300px]">
+        <Line options={options} data={data} />
+      </div>
+    );
+  } catch (error) {
+    console.error('Error rendering chart:', error);
+    return (
+      <div className="h-[300px] flex items-center justify-center text-red-500">
+        <p>Failed to render chart. Please try refreshing the page.</p>
+      </div>
+    );
+  }
 }
