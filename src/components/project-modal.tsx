@@ -1,1 +1,0 @@
-// Delete this file as it's been replaced by project-modal/index.tsx

@@ -15,7 +15,18 @@ export function RecurringSessionCard({
   onDelete
 }: RecurringSessionProps) {
   // Keep a local copy of the session to avoid issues with parent state updates
-  const [localSession, setLocalSession] = useState<RecurringSession>(JSON.parse(JSON.stringify(session)));
+  const [localSession, setLocalSession] = useState<RecurringSession>(() => {
+    // Initialize with deep clone and ensure all properties exist
+    const clone = JSON.parse(JSON.stringify(session));
+    if (!Array.isArray(clone.completions)) {
+      clone.completions = [];
+    }
+    if (!Array.isArray(clone.days)) {
+      clone.days = [];
+    }
+    return clone;
+  });
+  
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   
   console.log('RecurringSessionCard rendering:', localSession.id, localSession.title);
@@ -23,25 +34,49 @@ export function RecurringSessionCard({
   // Update local state when session props change
   useEffect(() => {
     console.log('Session prop updated, updating local state', session.id);
-    setLocalSession(JSON.parse(JSON.stringify(session)));
+    // Create a deep clone of the session
+    const updatedSession = JSON.parse(JSON.stringify(session));
+    
+    // Ensure all properties are properly initialized
+    if (!Array.isArray(updatedSession.completions)) {
+      updatedSession.completions = [];
+    }
+    if (!Array.isArray(updatedSession.days)) {
+      updatedSession.days = [];
+    }
+    
+    setLocalSession(updatedSession);
   }, [session]);
   
   // Handle local updates before propagating to parent
   const handleUpdate = (updatedFields: Partial<RecurringSession>) => {
+    // Create a new session object with the updated fields
     const updatedSession = { ...localSession, ...updatedFields };
     console.log('Updating session locally:', updatedSession);
+    
+    // Ensure days is always an array
+    if (!Array.isArray(updatedSession.days)) {
+      updatedSession.days = [];
+    }
+    
+    // Ensure completions is always an array
+    if (!Array.isArray(updatedSession.completions)) {
+      updatedSession.completions = [];
+    }
     
     // Update local state
     setLocalSession(updatedSession);
     
-    // Propagate to parent
-    onUpdate(updatedSession);
+    // Propagate to parent after validating
+    onUpdate(structuredClone(updatedSession));
   };
   
   // Handle deletion with confirmation
   const handleDelete = () => {
-    console.log('Deleting session:', localSession.id);
-    onDelete(localSession.id);
+    if (window.confirm('Are you sure you want to delete this session?')) {
+      console.log('Deleting session:', localSession.id);
+      onDelete(localSession.id);
+    }
   };
 
   return (
@@ -68,7 +103,7 @@ export function RecurringSessionCard({
           </label>
           <ToggleGroup
             type="multiple"
-            value={localSession.days}
+            value={localSession.days || []}
             onValueChange={days => handleUpdate({ days })}
             className="flex flex-wrap gap-2"
           >

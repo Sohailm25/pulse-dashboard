@@ -1,7 +1,7 @@
 import { Check, Clock } from 'lucide-react';
 import { Progress } from './ui/progress';
 import { useState } from 'react';
-import { ProjectModal } from './project-modal/index';
+import { ProjectModal } from './project-modal';
 import { MVGModal } from './project/mvg-modal';
 import type { Project } from '@/types/project';
 import type { WorkSession } from './schedule/work-session';
@@ -85,8 +85,28 @@ export function ProjectCard({
     }
     setIsMVGModalOpen(false);
   };
+  
+  // Handle project updates from the modal
+  const handleProjectUpdate = (updatedProject: Project) => {
+    console.log('ProjectCard received update:', updatedProject);
+    
+    // Ensure recurringSessions is properly formatted before passing to parent
+    if (!Array.isArray(updatedProject.recurringSessions)) {
+      updatedProject.recurringSessions = [];
+    }
+    
+    // Deep clone to avoid reference issues
+    const safeProject = JSON.parse(JSON.stringify(updatedProject));
+    
+    if (props.onUpdate) {
+      props.onUpdate(safeProject);
+    }
+  };
 
   const totalHours = calculateTotalHours();
+
+  // Ensure recurringSessions is properly formatted before passing to ProjectModal
+  const safeRecurringSessions = Array.isArray(recurringSessions) ? recurringSessions : [];
 
   return (
     <>
@@ -172,14 +192,14 @@ export function ProjectCard({
           progress, 
           color,
           phases: phases || [],
-          recurringSessions: recurringSessions || [],
+          recurringSessions: safeRecurringSessions,
           mvg,
           nextAction,
           ...props 
         }}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onUpdate={props.onUpdate}
+        onUpdate={handleProjectUpdate}
         sessions={props.sessions}
         onSessionAdd={props.onSessionAdd}
         allProjects={props.allProjects}

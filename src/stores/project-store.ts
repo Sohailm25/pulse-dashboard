@@ -170,13 +170,35 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (!userId) return;
     
     try {
+      console.log('Updating project in store:', JSON.stringify({
+        id: project.id,
+        title: project.title,
+        recurringSessions: project.recurringSessions?.length || 0
+      }));
+      
+      // Validate recurringSessions before sending to API
+      const validatedProject = { ...project };
+      
+      if (!Array.isArray(validatedProject.recurringSessions)) {
+        console.warn('recurringSessions is not an array, fixing before API call');
+        validatedProject.recurringSessions = [];
+      }
+      
+      // Validate each recurring session
+      validatedProject.recurringSessions = validatedProject.recurringSessions.map(session => {
+        if (!session.completions || !Array.isArray(session.completions)) {
+          session.completions = [];
+        }
+        return session;
+      });
+      
       set({ isLoading: true, error: null });
       const response = await fetch(`/api/projects/${project.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(project),
+        body: JSON.stringify(validatedProject),
         credentials: 'include'
       });
       
@@ -185,9 +207,31 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         throw new Error(errorData.message || 'Failed to update project');
       }
       
+      // Get the updated project from the response
       const updatedProject = await response.json();
+      
+      // Process the response to ensure all fields are properly formatted
+      const processedProject = {
+        ...updatedProject,
+        // Ensure these fields are arrays even if they come back as null or undefined
+        phases: Array.isArray(updatedProject.phases) ? updatedProject.phases : [],
+        // Handle possible snake_case from API
+        recurringSessions: Array.isArray(updatedProject.recurring_sessions) 
+          ? updatedProject.recurring_sessions 
+          : (Array.isArray(updatedProject.recurringSessions) 
+              ? updatedProject.recurringSessions 
+              : [])
+      };
+      
+      console.log('Project successfully updated:', JSON.stringify({
+        id: processedProject.id,
+        title: processedProject.title,
+        recurringSessions: processedProject.recurringSessions?.length || 0
+      }));
+      
+      // Update the projects in the store
       set(state => ({
-        projects: state.projects.map(p => p.id === project.id ? updatedProject : p)
+        projects: state.projects.map(p => p.id === project.id ? processedProject : p)
       }));
     } catch (error) {
       console.error('Update project error:', error);

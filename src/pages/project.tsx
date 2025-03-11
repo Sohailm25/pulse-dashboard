@@ -4,7 +4,7 @@ import { ProjectChart } from '@/components/analytics/project-chart';
 import { WeeklySchedule } from '@/components/schedule/weekly-schedule';
 import type { WorkSession } from '@/components/schedule/work-session';
 import { useProjectStore } from '@/stores/project-store';
-import { ProjectModal } from '@/components/project-modal/index';
+import { ProjectModal } from '@/components/project-modal';
 
 export function ProjectPage() {
   const { id } = useParams();
@@ -74,7 +74,9 @@ export function ProjectPage() {
       data: [30, 45, 60, 75],
       borderColor: 'rgb(124, 58, 237)',
       backgroundColor: 'rgba(124, 58, 237, 0.1)',
-      fill: true
+      fill: true,
+      tension: 0.4,
+      borderWidth: 2
     }]
   };
 
