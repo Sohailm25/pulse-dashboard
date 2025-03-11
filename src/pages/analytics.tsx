@@ -19,7 +19,7 @@ export function AnalyticsPage() {
   console.log('AnalyticsPage rendering');
   
   // Add render counter for debugging
-  const renderCount = useRef(0);
+  const renderCount = useRef(1);
   renderCount.current += 1;
   
   const getProjectsForUser = useProjectStore(state => state.projects);
@@ -36,11 +36,11 @@ export function AnalyticsPage() {
   console.log(`Current projects signature: ${projectsSignature}`);
   
   // Reference to track the last processed projects to prevent unnecessary reprocessing
-  const lastProcessedProjects = useRef("");
+  const lastProcessedProjects = useRef<string | null>(null);
   console.log(`Last processed projects signature: ${lastProcessedProjects.current}`);
 
   // Add a state to store the color mapping from color names to RGB values
-  const [colorVars, setColorVars] = useState<Record<string, number[]>>({});
+  const [colorVars, setColorVars] = useState<{[key: string]: string}>({});
   
   // Track processed project IDs to avoid reprocessing the same colors
   const processedProjectIds = useRef<string[]>([]);
@@ -52,392 +52,297 @@ export function AnalyticsPage() {
   // Flag to track loading state
   const [isLoading, setIsLoading] = useState(true);
   
-  // Get color variables from CSS
+  // Create safe fallback data for the project chart
+  const [projectData, setProjectData] = useState<{
+    labels: string[];
+    datasets: {
+      label: string;
+      data: number[];
+      borderColor: string;
+      backgroundColor: string;
+      fill: boolean;
+      tension: number; 
+      borderWidth: number;
+    }[];
+  }>({
+    labels: [],
+    datasets: []
+  });
+  
+  // Safety timeout to prevent infinite loading state
   useEffect(() => {
-    console.log('Starting colorVars useEffect');
-    console.log(`---> Project count: ${projects.length}`);
-    console.log(`---> ProcessedProjectIds count: ${processedProjectIds.current.length}`);
-    console.log(`---> ProjectsSignature: ${projectsSignature}`);
-    console.log(`---> lastProcessedProjects.current: ${lastProcessedProjects.current}`);
-    
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        console.log('Loading timeout triggered - forcing load completion');
+        setIsLoading(false);
+      }, 3000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
+  
+  // Extract colors from CSS variables with fallbacks
+  useEffect(() => {
     try {
-      // Skip if the same projects have already been processed
-      if (projectsSignature === lastProcessedProjects.current && Object.keys(colorVars).length > 0) {
-        console.log('SKIPPING: Same projects already processed');
+      console.log('Extracting colors from CSS variables...');
+      
+      if (!document || !document.documentElement) {
+        console.log('Document not available yet');
         return;
       }
       
-      // Reset processed IDs if the projects have changed
-      if (projectsSignature !== lastProcessedProjects.current) {
-        console.log('Projects changed, resetting processed IDs');
-        processedProjectIds.current = [];
-      }
-      
-      // Create a map to store color values
-      const newColorVars: Record<string, number[]> = {};
-      
-      console.log(`Processing ${projects.length} projects for colors`);
-      
-      // Get all unique color values
-      const uniqueColors = new Set<string>();
-      projects.forEach((project: any) => {
-        if (project.color) {
-          uniqueColors.add(project.color);
-        }
-      });
-      
-      console.log(`Found ${uniqueColors.size} unique colors`);
-      
-      // Extract the color values from CSS variables
-      uniqueColors.forEach(colorClass => {
-        // Get color name without the bg- prefix, e.g., 'bg-purple-600' -> 'purple-600'
-        const colorName = colorClass.replace('bg-', '');
-        console.log(`Getting color var for ${colorName}`);
-        
+      const styles = getComputedStyle(document.documentElement);
+      const extractColor = (name: string, fallback: string): string => {
         try {
-          // Get the RGB values from the CSS variable
-          const root = document.documentElement;
-          const computedStyle = getComputedStyle(root);
-          const cssVar = computedStyle.getPropertyValue(`--${colorName}`).trim();
-          
-          if (cssVar) {
-            const rgbValues = cssVar.split(' ').map(val => parseInt(val, 10));
-            newColorVars[colorClass] = rgbValues;
-            console.log(`Set color var for ${colorClass}: ${rgbValues.join(' ')}`);
-          } else {
-            // Fallback to a default color if CSS variable not found
-            newColorVars[colorClass] = [124, 58, 237]; // Purple fallback
-            console.log(`Using fallback color for ${colorClass}`);
-          }
+          const color = styles.getPropertyValue(name).trim();
+          return color || fallback;
         } catch (err) {
-          console.error(`Error getting color for ${colorName}:`, err);
-          // Use fallback color
-          newColorVars[colorClass] = [124, 58, 237]; // Purple fallback
+          console.error(`Error getting color ${name}:`, err);
+          return fallback;
         }
-      });
+      };
       
-      // Update processed IDs
-      processedProjectIds.current = projects.map((p: any) => p.id);
+      const colors = {
+        'purple': extractColor('--purple-600', '#9333ea'),
+        'blue': extractColor('--blue-600', '#2563eb'),
+        'green': extractColor('--green-600', '#16a34a'),
+        'red': extractColor('--red-600', '#dc2626'),
+        'yellow': extractColor('--yellow-600', '#ca8a04'),
+        'pink': extractColor('--pink-600', '#db2777'),
+        'indigo': extractColor('--indigo-600', '#4f46e5'),
+      };
       
-      // Only set state if the colors are different
-      const existingColorKeys = Object.keys(colorVars).sort().join(',');
-      const newColorKeys = Object.keys(newColorVars).sort().join(',');
+      console.log('Extracted color variables:', colors);
+      setColorVars(colors);
       
-      if (newColorKeys !== existingColorKeys || 
-          !Object.keys(newColorVars).every(key => {
-            return colorVars[key]?.toString() === newColorVars[key]?.toString();
-          })) {
-        console.log(`Setting colorVars: ${Object.entries(newColorVars).length}`);
-        setColorVars(newColorVars);
-      }
-      
-      // Update the lastProcessedProjects to avoid unnecessary reprocessing
-      lastProcessedProjects.current = projectsSignature;
-    } catch (err) {
-      console.error('Error in colorVars useEffect:', err);
-      setComponentError(`Error loading color variables: ${err instanceof Error ? err.message : String(err)}`);
+      // Force isLoading to false after colors are loaded
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
+    } catch (error) {
+      console.error('Error extracting colors:', error);
+      setComponentError('Error loading color theme. Please refresh the page.');
       setHasError(true);
       setIsLoading(false);
     }
-    
-    console.log('Completed colorVars useEffect');
-  }, [projects, projectsSignature, colorVars]);
+  }, []);
   
-  // Add timeout to ensure we don't get stuck in loading state
+  // Calculate project data for chart with better error handling
   useEffect(() => {
-    // Set a timeout to exit loading state after 5 seconds just in case
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        console.log('Loading timeout reached - forcing exit from loading state');
-        setIsLoading(false);
+    try {
+      console.log('Calculating project data for chart...');
+      if (Object.keys(colorVars).length === 0) {
+        console.log('Colors not loaded yet, waiting...');
+        return;
       }
-    }, 5000);
-    
-    return () => clearTimeout(timer);
-  }, [isLoading]);
+      
+      // Calculate project data without animation initially
+      const data = calculateTimeSpent();
+      console.log('Calculated project data:', data);
+      setProjectData(data);
+    } catch (error) {
+      console.error('Error calculating project data:', error);
+      setComponentError('Error processing project data. Please refresh the page.');
+      setHasError(true);
+      setProjectData({
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        datasets: []
+      });
+    } finally {
+      // Ensure loading state is resolved
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
+    }
+  }, [colorVars, projects]);
   
   // Calculate daily (non-cumulative) time spent per project
   const calculateTimeSpent = () => {
     try {
-      console.log('calculateTimeSpent called');
-      
-      // Get week range
+      console.log('Starting calculateTimeSpent...');
       const today = new Date();
-      const weekStart = startOfWeek(today);
-      const weekEnd = endOfWeek(today);
+      const start = startOfWeek(today, { weekStartsOn: 1 });
+      const end = endOfWeek(today, { weekStartsOn: 1 });
       
-      console.log(`Week range: ${format(weekStart, 'yyyy-MM-dd')} to ${format(weekEnd, 'yyyy-MM-dd')}`);
+      console.log(`Week range: ${start.toISOString()} to ${end.toISOString()}`);
       
-      // Generate array of day strings for the week
-      const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd }).map((day: any) => 
-        format(day, 'yyyy-MM-dd')
-      );
-      console.log('Week days:', weekDays);
-      
-      // For projects without valid recurringSessions, provide sensible defaults
-      const validProjects = projects.filter((project: any) => 
-        project && project.recurringSessions && Array.isArray(project.recurringSessions)
+      // Generate array of day strings
+      const days = eachDayOfInterval({ start, end }).map(day => 
+        format(day, 'EEE')
       );
       
-      console.log(`Processing ${validProjects.length} projects with ${Object.keys(colorVars).length} colors`);
+      console.log('Days of week:', days);
       
-      if (validProjects.length === 0) {
-        return {
-          labels: weekDays.map((day: any) => format(parse(day, 'yyyy-MM-dd', new Date()), 'EEE')),
-          datasets: []
-        };
-      }
+      // Create labels array
+      const labels = days;
       
-      // Add dummy completion data for testing if no completions exist
-      let addedDummyData = false;
-      validProjects.forEach((project: any) => {
-        if (project.recurringSessions && Array.isArray(project.recurringSessions)) {
-          project.recurringSessions.forEach((session: any) => {
-            if (!session.completions || !Array.isArray(session.completions) || session.completions.length === 0) {
-              // Add a dummy completion for today
-              const today = format(new Date(), 'yyyy-MM-dd');
-              
-              if (!session.completions) {
-                session.completions = [];
-              }
-              
-              session.completions.push({
-                date: today,
-                completed: true,
-                duration: 60 // 1 hour in minutes
-              });
-              
-              console.log(`Adding dummy completion for ${project.title}, session ${session.title} on ${today}`);
-              addedDummyData = true;
-            }
-          });
-        }
-      });
+      // Filter valid projects that have recurring sessions
+      const validProjects = projects.filter(project => 
+        project.recurringSessions && 
+        Array.isArray(project.recurringSessions) && 
+        project.recurringSessions.length > 0
+      );
       
-      if (addedDummyData) {
-        console.log('Added dummy completion data for testing - chart should now show data');
-      }
+      console.log(`Valid projects count: ${validProjects.length}`);
       
-      return {
-        labels: weekDays.map((day: any) => format(parse(day, 'yyyy-MM-dd', new Date()), 'EEE')),
-        datasets: validProjects.map((project: any) => {
-          console.log(`Processing project: ${project.title} (${project.id})`);
-          // Calculate daily hours (non-cumulative)
-          const dailyData = weekDays.map((day: any) => {
-            // Skip if project has no recurringSessions
-            if (!project.recurringSessions || !Array.isArray(project.recurringSessions)) {
-              console.log(`Project ${project.title} has no valid recurringSessions`);
-              return 0;
-            }
-            
-            project.recurringSessions.forEach((session: any) => {
+      // Generate datasets
+      const datasets = validProjects.map(project => {
+        try {
+          console.log(`Processing project: ${project.title}`);
+          
+          // Get color from CSS variable or use fallback
+          const colorMatch = project.color.match(/bg-([a-z]+)-\d+/);
+          const colorName = colorMatch ? colorMatch[1] : 'purple';
+          const color = colorVars[colorName] || '#9333ea'; // Fallback color
+          
+          console.log(`Project ${project.title} - Color: ${colorName} -> ${color}`);
+          
+          // Prepare accumulative daily hours
+          let accumulativeHours = Array(7).fill(0);
+          
+          // Process each session
+          if (project.recurringSessions && Array.isArray(project.recurringSessions)) {
+            project.recurringSessions.forEach(session => {
               if (!session.completions || !Array.isArray(session.completions)) {
-                console.log(`Session ${session.title} has no valid completions`);
+                console.log(`No completions for session: ${session.title}`);
                 return;
               }
               
-              // Debug completions for this session
-              console.log(`Session ${session.title} has ${session.completions.length} completions:`);
-              session.completions.forEach((completion: any) => {
-                console.log(`- Date: ${completion.date}, Completed: ${completion.completed}, Duration: ${completion.duration || 'N/A'}`);
+              // Add dummy completions for testing if none exist
+              const completions = session.completions.length > 0 
+                ? session.completions 
+                : [
+                  { date: format(addDays(today, -3), 'yyyy-MM-dd'), completed: true, notes: 'Dummy completion' }
+                ];
+              
+              console.log(`Session ${session.title} has ${completions.length} completions`);
+              
+              completions.forEach(completion => {
+                if (!completion.date) {
+                  console.log('Completion missing date, skipping');
+                  return;
+                }
+                
+                try {
+                  // Parse date safely
+                  const completionDate = typeof completion.date === 'string' 
+                    ? parse(completion.date, 'yyyy-MM-dd', new Date())
+                    : new Date(completion.date);
+                  
+                  if (isNaN(completionDate.getTime())) {
+                    console.log(`Invalid date: ${completion.date}`);
+                    return;
+                  }
+                  
+                  // Check if date is within our week
+                  if (completionDate >= start && completionDate <= end) {
+                    const dayIndex = days.indexOf(format(completionDate, 'EEE'));
+                    if (dayIndex === -1) {
+                      console.log(`Day not found for date: ${format(completionDate, 'EEE')}`);
+                      return;
+                    }
+                    
+                    // Calculate duration in hours
+                    let durationHours = 0;
+                    
+                    if (session.startTime && session.endTime) {
+                      const startMinutes = session.startTime.split(':').map(Number);
+                      const endMinutes = session.endTime.split(':').map(Number);
+                      
+                      if (startMinutes.length >= 2 && endMinutes.length >= 2) {
+                        const start = new Date();
+                        start.setHours(startMinutes[0], startMinutes[1], 0);
+                        
+                        const end = new Date();
+                        end.setHours(endMinutes[0], endMinutes[1], 0);
+                        
+                        durationHours = differenceInMinutes(end, start) / 60;
+                      }
+                    }
+                    
+                    // Use 1 hour as fallback if calculation failed
+                    if (durationHours <= 0) {
+                      durationHours = 1;
+                    }
+                    
+                    // Add to accumulated hours for the day
+                    accumulativeHours[dayIndex] += durationHours;
+                    
+                    console.log(`Added ${durationHours} hours for ${project.title} on ${format(completionDate, 'EEE')}`);
+                  }
+                } catch (err) {
+                  console.error('Error processing completion:', err);
+                }
               });
             });
-            
-            // Calculate total hours for this day across all sessions
-            let dayHours = project.recurringSessions.reduce((total: any, session: any) => {
-              if (!session.completions || !Array.isArray(session.completions)) return total;
-              
-              // Find completion for this day
-              const completion = session.completions.find(
-                (c: any) => c.date === day && c.completed
-              );
-              
-              if (!completion) return total;
-              
-              // Add the duration to the total (might be explicit or calculated from start/end time)
-              if (completion.duration) {
-                // Duration is in minutes, convert to hours
-                return total + (completion.duration / 60);
-              } else if (completion.startTime && completion.endTime) {
-                try {
-                  const start = parse(completion.startTime, 'HH:mm', new Date());
-                  const end = parse(completion.endTime, 'HH:mm', new Date());
-                  const durationInMinutes = differenceInMinutes(end, start);
-                  return total + (durationInMinutes / 60);
-                } catch (err) {
-                  console.error(`Error parsing time: ${err}`);
-                  return total;
-                }
-              }
-              
-              // If no duration found but completion is marked as completed,
-              // use the session's scheduled duration
-              if (session.startTime && session.endTime) {
-                try {
-                  const start = parse(session.startTime, 'HH:mm', new Date());
-                  const end = parse(session.endTime, 'HH:mm', new Date());
-                  const durationInMinutes = differenceInMinutes(end, start);
-                  return total + (durationInMinutes / 60);
-                } catch (err) {
-                  console.error(`Error parsing session time: ${err}`);
-                }
-              }
-              
-              return total;
-            }, 0);
-            
-            console.log(`Day ${day} for project ${project.title}: ${dayHours} hours`);
-            return dayHours;
-          });
-          
-          console.log(`Daily data for ${project.title} (${project.id}):`, dailyData);
+          }
           
           // Calculate cumulative data
-          const cumulativeData = dailyData.reduce((acc: any, hours: any, i: any) => {
-            if (i === 0) return [hours];
-            return [...acc, acc[i - 1] + hours];
-          }, [] as number[]);
-          
-          console.log(`Cumulative data for ${project.title} (${project.id}):`, cumulativeData);
-          
-          // Get color from project color
-          const colorClass = project.color || 'bg-purple-600'; // Default to purple if no color
-          const rgbValues = colorVars[colorClass] || [124, 58, 237]; // Default values if not found
-          
-          console.log(`Using color ${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]} for project ${project.title} (${project.id})`);
+          const cumulativeData = accumulativeHours.map((hours, index) => {
+            let total = 0;
+            for (let i = 0; i <= index; i++) {
+              total += accumulativeHours[i];
+            }
+            return total;
+          });
           
           return {
             label: project.title,
             data: cumulativeData,
-            borderColor: `rgb(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]})`,
-            backgroundColor: `rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, 0.1)`,
+            borderColor: color,
+            backgroundColor: `${color}20`,
             fill: true,
             tension: 0.4,
-            borderWidth: 2
+            borderWidth: 2,
           };
-        })
+        } catch (err) {
+          console.error(`Error processing project ${project.title}:`, err);
+          // Return fallback dataset
+          return {
+            label: project.title || 'Unknown',
+            data: [0, 0, 0, 0, 0, 0, 0],
+            borderColor: '#9333ea',
+            backgroundColor: '#9333ea20',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2,
+          };
+        }
+      });
+      
+      return {
+        labels,
+        datasets: datasets.length ? datasets : [
+          // Provide fallback dataset if no data
+          {
+            label: 'No Data',
+            data: [0, 0, 0, 0, 0, 0, 0],
+            borderColor: '#9333ea',
+            backgroundColor: '#9333ea20',
+            fill: true,
+            tension: 0.4,
+            borderWidth: 2,
+          }
+        ]
       };
-    } catch (err) {
-      console.error('Error calculating time spent:', err);
-      setComponentError(`Error calculating project data: ${err instanceof Error ? err.message : String(err)}`);
-      setHasError(true);
-      setIsLoading(false);
-      return { labels: [], datasets: [] };
+    } catch (error) {
+      console.error('Error in calculateTimeSpent:', error);
+      // Return safe fallback data
+      return {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        datasets: [{
+          label: 'Error in calculation',
+          data: [0, 0, 0, 0, 0, 0, 0],
+          borderColor: '#9333ea',
+          backgroundColor: '#9333ea20',
+          fill: true,
+          tension: 0.4,
+          borderWidth: 2,
+        }]
+      };
     }
   };
   
-  // Calculate project data for chart
-  const [projectData, setProjectData] = useState<{ labels: string[], datasets: any[] }>({ 
-    labels: [], 
-    datasets: [] 
-  });
-  
-  // Update project data when color variables change
-  useEffect(() => {
-    console.log('Starting projectData useEffect');
-    console.log(`---> ColorVars keys: ${Object.keys(colorVars).join(', ')}`);
-    console.log(`---> ProjectsSignature: ${projectsSignature}`);
-    
-    try {
-      // Always ensure we have some color mapping, even if empty
-      const safeColorVars = Object.keys(colorVars).length > 0 
-        ? colorVars 
-        : { 'bg-purple-600': [124, 58, 237] }; // Default fallback color
-      
-      console.log('Calculating project data');
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      
-      // Get week range
-      const today = new Date();
-      const weekStart = startOfWeek(today);
-      const weekEnd = endOfWeek(today);
-      
-      // Generate array of day strings for the week
-      const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd }).map((day: any) => 
-        format(day, 'yyyy-MM-dd')
-      );
-      
-      // Create chart labels
-      const chartLabels = weekDays.map((day: any) => format(parse(day, 'yyyy-MM-dd', new Date()), 'EEE'));
-      
-      // For projects without data, create empty datasets
-      if (!projects || projects.length === 0) {
-        const emptyData = {
-          labels: chartLabels,
-          datasets: []
-        };
-        
-        setProjectData(emptyData);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Process each project to create datasets
-      const datasets = projects
-        .filter((project: any) => project && project.recurringSessions)
-        .map((project: any) => {
-          // Calculate daily hours (simplified)
-          const dailyData = weekDays.map(() => 0); // Start with zeros
-          
-          // Get cumulative hours (just use zeros for now, they'll be updated later)
-          const cumulativeData = [0, 0, 0, 0, 0, 0, 0];
-            
-          // Get color from project color, with fallbacks
-          const colorClass = project.color || 'bg-purple-600';
-          const rgbValues = safeColorVars[colorClass] || [124, 58, 237];
-          
-          // Add some dummy data if all zeros (just for testing)
-          cumulativeData[2] = 1; // Add some data for Tuesday
-          cumulativeData[3] = 1.5; // Add some data for Wednesday
-          cumulativeData[4] = 2; // Add some data for Thursday
-          
-          return {
-            label: project.title || 'Unnamed Project',
-            data: cumulativeData,
-            borderColor: `rgb(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]})`,
-            backgroundColor: `rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, 0.1)`,
-            fill: true,
-            tension: 0.4,
-            borderWidth: 2
-          };
-        });
-      
-      // Create new chart data
-      const newData = {
-        labels: chartLabels,
-        datasets
-      };
-      
-      // Set project data and exit loading state
-      setProjectData(newData);
-      setIsLoading(false);
-      
-    } catch (err) {
-      console.error('Error in projectData useEffect:', err);
-      
-      // Create a fallback dataset with dummy data so the user sees something
-      const fallbackData = {
-        labels: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-        datasets: projects.slice(0, 3).map((project: any, idx: number) => ({
-          label: project?.title || `Project ${idx + 1}`,
-          data: [0, 0, idx + 0.5, idx + 1, idx + 1.5, idx + 2, idx + 2],
-          borderColor: idx === 0 ? 'rgb(124, 58, 237)' : idx === 1 ? 'rgb(59, 130, 246)' : 'rgb(16, 185, 129)',
-          backgroundColor: idx === 0 ? 'rgba(124, 58, 237, 0.1)' : idx === 1 ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-          fill: true,
-          tension: 0.4,
-          borderWidth: 2
-        }))
-      };
-      
-      setProjectData(fallbackData);
-      setComponentError(`Error calculating chart data: ${err instanceof Error ? err.message : String(err)}`);
-      setIsLoading(false);
-    }
-    
-    console.log('Completed projectData useEffect');
-  }, [colorVars, projectsSignature, isLoading, projects]);
-
   // Calculate total hours this week from completed sessions
   const calculateTotalHours = () => {
     try {
