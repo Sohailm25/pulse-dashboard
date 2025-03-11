@@ -17,6 +17,22 @@
   --indigo-600: 79 70 229;
 }
 
+/* Global styles to prevent horizontal scrolling */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Apply a reasonable touch target size for mobile */
+@media (max-width: 768px) {
+  button, 
+  [role="button"],
+  a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 .bg-primary {
   background-color: rgb(var(--primary));
 }
@@ -73,7 +89,7 @@
     left: 0;
     right: 0;
     background: white;
-    padding: 1rem;
+    padding: 0.5rem 0.25rem;
     border-top: 1px solid #e5e7eb;
     z-index: 50;
     display: flex;
@@ -106,6 +122,24 @@
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
+  }
+
+  /* Improve mobile scrolling in modals and containers */
+  .modal-body,
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+  }
+
+  /* Full width buttons on mobile */
+  .btn-full-mobile {
+    width: 100% !important;
+  }
+  
+  /* Fix text overflow in cards and containers */
+  .text-wrap-mobile {
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
   }
 
   .mobile-scroll {

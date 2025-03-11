@@ -102,7 +102,7 @@ export function DashboardPage() {
                     }
                   }}
                 >
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     {mvgStatuses.map((status) => (
                       <div key={status.id} className="flex flex-col space-y-4">
                         <KanbanHeader
@@ -139,8 +139,8 @@ export function DashboardPage() {
               </KanbanProvider>
             </div>
             
-            <div className="grid grid-cols-4 gap-6 mobile-grid">
-              <div className="col-span-3 mobile-full">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-3">
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-xl font-semibold dark:text-white">Identity Habit Tracker</h2>
@@ -152,7 +152,8 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <div className="col-span-3 mobile-hidden">
+              {/* Calendar Widget - visible on both mobile and desktop */}
+              <div className="lg:col-span-3">
                 <CalendarWidget date={today} events={calendarEvents} />
               </div>
             </div>

@@ -79,7 +79,7 @@ export function Layout() {
   ];
 
   const Navigation = () => (
-    <div className="space-y-2">
+    <div className={`${isMobile ? 'flex justify-around' : 'space-y-2'}`}>
       {navigationItems.map(item => {
         const Icon = item.icon;
         return (
@@ -87,16 +87,13 @@ export function Layout() {
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+              `${isMobile ? 'w-14 h-10' : 'w-10 h-10'} flex items-center justify-center rounded-xl transition-all ${
                 isActive 
                   ? 'bg-primary text-white' 
                   : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
               }`
             }
             title={item.label}
-            onClick={() => {
-              console.log(`Navigating to: ${item.to}`);
-            }}
           >
             <Icon className="w-5 h-5" />
           </NavLink>
@@ -105,7 +102,7 @@ export function Layout() {
 
       <button
         onClick={toggleTheme}
-        className="w-10 h-10 flex items-center justify-center rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+        className={`${isMobile ? 'w-14 h-10' : 'w-10 h-10'} flex items-center justify-center rounded-xl transition-all text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700`}
         title={isDark ? "Light Mode" : "Dark Mode"}
       >
         <AnimatePresence mode="wait">
@@ -135,7 +132,7 @@ export function Layout() {
 
       <button
         onClick={handleLogout}
-        className="w-10 h-10 flex items-center justify-center rounded-xl transition-all text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
+        className={`${isMobile ? 'w-14 h-10' : 'w-10 h-10'} flex items-center justify-center rounded-xl transition-all text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10`}
         title="Logout"
       >
         <LogOut className="w-5 h-5" />
@@ -159,7 +156,7 @@ export function Layout() {
       )}
       
       <main className={`${isMobile ? 'px-4' : 'pl-28 pr-8'} py-8 pb-24`}>
-        <header className="flex items-center justify-between mb-8 mobile-stack gap-4">
+        <header className="flex items-center justify-between mb-8 flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               {getGreeting()}, {user?.name || 'User'}
@@ -176,7 +173,7 @@ export function Layout() {
           
           <button
             onClick={handleAddProject}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 flex items-center gap-2 mobile-full justify-center"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 flex items-center gap-2 justify-center w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             Add New Project
@@ -197,10 +194,8 @@ export function Layout() {
       </main>
 
       {isMobile && (
-        <nav className="mobile-nav dark:bg-gray-800 dark:border-gray-700">
-          <div className="flex items-center justify-around">
-            <Navigation />
-          </div>
+        <nav className="mobile-nav dark:bg-gray-800 dark:border-gray-700 h-16">
+          <Navigation />
         </nav>
       )}
     </div>

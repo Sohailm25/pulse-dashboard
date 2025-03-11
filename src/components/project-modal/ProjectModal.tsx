@@ -39,6 +39,9 @@ export function ProjectModal({
   // Add state to track expanded phases for accordion UI
   const [expandedPhases, setExpandedPhases] = useState<Record<string, boolean>>({});
   
+  // Dialog ref for detecting outside clicks
+  const dialogRef = useRef<HTMLDivElement>(null);
+  
   // Add more detailed logging
   console.log('ProjectModal rendering', { 
     projectId: project.id, 
@@ -52,6 +55,36 @@ export function ProjectModal({
   const renderCount = useRef(0);
   renderCount.current++;
   console.log(`ProjectModal render count: ${renderCount.current}`);
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      // Save the current scroll position
+      const scrollY = window.scrollY;
+      // Add styles to body to prevent scrolling
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflowY = 'hidden';
+    } else {
+      // Restore scrolling when modal closes
+      const scrollY = document.body.style.top;
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflowY = '';
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
+      }
+    }
+    return () => {
+      // Cleanup in case component unmounts while modal is open
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflowY = '';
+    };
+  }, [isOpen]);
 
   // Deep clone for debugging
   useEffect(() => {
@@ -376,42 +409,37 @@ export function ProjectModal({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative bg-white dark:bg-gray-800 w-[900px] max-w-[90vw] max-h-[90vh] rounded-xl shadow-xl flex flex-col overflow-hidden"
+        className="relative bg-white dark:bg-gray-800 w-[900px] max-w-[95vw] max-h-[90vh] rounded-xl shadow-xl flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b dark:border-gray-700">
           <input
             type="text"
             value={project.title}
             onChange={e => handleChange('title', e.target.value)}
-            className="text-xl font-semibold bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded px-2 -ml-2 dark:text-white"
+            className="text-lg sm:text-xl font-semibold bg-transparent focus:outline-none focus:ring-2 focus:ring-primary/20 rounded px-2 -ml-2 dark:text-white w-full"
           />
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <button
               onClick={saveProject}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+              className="px-2 sm:px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90"
             >
               Save
             </button>
             <button
-              onClick={dumpStateToConsole}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
-            >
-              Debug
-            </button>
-            <button
               onClick={handleClose}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              aria-label="Close"
             >
               <X className="w-5 h-5 dark:text-gray-300" />
             </button>
           </div>
         </div>
         
-        <div className="p-6 overflow-y-auto h-full">
-          <div className="grid grid-cols-12 gap-6">
+        <div className="p-4 sm:p-6 overflow-y-auto h-full overscroll-contain">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left column for basic details */}
-            <div className="col-span-7 space-y-6">
+            <div className="lg:col-span-7 space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Description
@@ -424,7 +452,7 @@ export function ProjectModal({
                 />
               </div>
               
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Start Date
@@ -519,7 +547,7 @@ export function ProjectModal({
             </div>
             
             {/* Right column for phases */}
-            <div className="col-span-5 space-y-6">
+            <div className="lg:col-span-5 space-y-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-medium dark:text-white">Phases</h3>

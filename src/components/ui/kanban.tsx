@@ -4,15 +4,40 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
   DndContext,
-  rectIntersection,
-  useDraggable,
-  useDroppable,
-  DragEndEvent,
+  closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  DragOverlay,
+  UniqueIdentifier,
+  DraggableSyntheticListeners,
+  useDraggable,
+  useDroppable,
+  rectIntersection,
+  DragEndEvent,
 } from '@dnd-kit/core';
-import type { ReactNode } from 'react';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { createContext, useContext, ReactNode } from 'react';
+
+interface DragHandleProps {
+  id: UniqueIdentifier;
+  listeners?: DraggableSyntheticListeners;
+}
+
+interface KanbanContextProps {
+  activeId: UniqueIdentifier | null;
+}
+
+const KanbanContext = createContext<KanbanContextProps>({
+  activeId: null,
+});
 
 export type Status = {
   id: string;
@@ -28,43 +53,109 @@ export type Feature = {
   status: Status;
 };
 
-export type KanbanBoardProps = {
-  id: Status['id'];
+interface KanbanProviderProps {
+  children: ReactNode;
+  onDragEnd?: (event: DragEndEvent) => void;
+  className?: string;
+}
+
+interface KanbanBoardProps {
+  children: ReactNode;
+  onDragEnd: (event: DragEndEvent) => void;
+}
+
+interface KanbanHeaderProps {
+  id: string;
   children: ReactNode;
   className?: string;
-};
+}
 
-export const KanbanBoard = ({ id, children, className }: KanbanBoardProps) => {
-  const { isOver, setNodeRef } = useDroppable({ id });
+interface KanbanCardsProps {
+  id: string;
+  children: ReactNode;
+}
+
+interface KanbanCardProps {
+  id: string;
+  children?: ReactNode;
+  className?: string;
+  index?: number;
+  parent?: string;
+  name?: string;
+}
+
+export const KanbanProvider = ({
+  children,
+  onDragEnd,
+  className,
+}: KanbanProviderProps) => {
+  // Configure the drag sensor with a custom activation constraint
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      // Increase drag activation constraints for better mobile experience
+      activationConstraint: {
+        distance: 8, // Minimum distance before a drag starts
+        delay: 150, // Delay in ms before a drag starts - useful for mobile
+        tolerance: 5, // Tolerance for movement during delay
+      },
+    })
+  );
 
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={rectIntersection}
+      onDragEnd={onDragEnd}
+    >
+      <div className="grid w-full auto-cols-fr grid-flow-col gap-4 sm:grid-flow-col">
+        {children}
+      </div>
+    </DndContext>
+  );
+};
+
+export const KanbanBoard = ({ children, onDragEnd }: KanbanBoardProps) => {
+  return (
     <div
-      className={cn(
-        'flex h-full min-h-40 flex-col gap-2 rounded-md border bg-secondary p-2 text-xs shadow-sm outline outline-2 transition-all',
-        isOver ? 'outline-primary' : 'outline-transparent',
-        className
-      )}
-      ref={setNodeRef}
+      onTouchMove={(e) => {
+        // Prevent page scrolling during drag on mobile
+        if (document.querySelector("[data-dragging]")) {
+          e.preventDefault();
+        }
+      }}
     >
       {children}
     </div>
   );
 };
 
-export type KanbanCardProps = Pick<Feature, 'id' | 'name'> & {
-  index: number;
-  parent: string;
-  children?: ReactNode;
-  className?: string;
+export const KanbanHeader = ({
+  id,
+  children,
+  className,
+}: KanbanHeaderProps) => {
+  return <div className={className}>{children}</div>;
+};
+
+export const KanbanCards = ({ id, children }: KanbanCardsProps) => {
+  const { setNodeRef } = useDroppable({
+    id,
+  });
+
+  return (
+    <div ref={setNodeRef} className="min-h-[150px] p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+      {children}
+    </div>
+  );
 };
 
 export const KanbanCard = ({
   id,
-  name,
-  index,
-  parent,
   children,
   className,
+  index = 0,
+  parent,
+  name,
 }: KanbanCardProps) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -79,87 +170,21 @@ export const KanbanCard = ({
       transform: transform
         ? `translateX(${transform.x}px) translateY(${transform.y}px)`
         : undefined,
+      opacity: isDragging ? 0.5 : 1,
+      zIndex: isDragging ? 1 : 0,
     },
   };
 
   return (
-    <Card
-      className={cn(
-        'rounded-md p-3 shadow-sm',
-        isDragging && 'cursor-grabbing',
-        className
-      )}
+    <div
+      className={`rounded-md p-3 shadow-sm mb-3 touch-manipulation ${
+        isDragging ? 'cursor-grabbing' : ''
+      } ${className || ''}`}
       ref={setNodeRef}
       {...dragAttributes}
+      data-dragging={isDragging || undefined}
     >
       {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
-    </Card>
-  );
-};
-
-export type KanbanCardsProps = {
-  children: ReactNode;
-  className?: string;
-};
-
-export const KanbanCards = ({ children, className }: KanbanCardsProps) => (
-  <div className={cn('flex flex-1 flex-col gap-2', className)}>{children}</div>
-);
-
-export type KanbanHeaderProps =
-  | {
-      children: ReactNode;
-    }
-  | {
-      name: Status['name'];
-      color: Status['color'];
-      className?: string;
-    };
-
-export const KanbanHeader = (props: KanbanHeaderProps) =>
-  'children' in props ? (
-    props.children
-  ) : (
-    <div className={cn('flex shrink-0 items-center gap-2', props.className)}>
-      <div
-        className="h-2 w-2 rounded-full"
-        style={{ backgroundColor: props.color }}
-      />
-      <p className="m-0 font-semibold text-sm">{props.name}</p>
     </div>
-  );
-
-export type KanbanProviderProps = {
-  children: ReactNode;
-  onDragEnd: (event: DragEndEvent) => void;
-  className?: string;
-};
-
-export const KanbanProvider = ({
-  children,
-  onDragEnd,
-  className,
-}: KanbanProviderProps) => {
-  // Configure the drag sensor with a custom activation constraint
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // 8px of movement required before drag starts
-      },
-    })
-  );
-
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={rectIntersection}
-      onDragEnd={onDragEnd}
-    >
-      <div
-        className={cn('grid w-full auto-cols-fr grid-flow-col gap-4', className)}
-      >
-        {children}
-      </div>
-    </DndContext>
   );
 };
