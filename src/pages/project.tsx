@@ -4,7 +4,7 @@ import { ProjectChart } from '@/components/analytics/project-chart';
 import { WeeklySchedule } from '@/components/schedule/weekly-schedule';
 import type { WorkSession } from '@/components/schedule/work-session';
 import { useProjectStore } from '@/stores/project-store';
-import { ProjectModal } from '@/components/project-modal';
+import { ProjectModal } from '@/components/project-modal/index';
 
 export function ProjectPage() {
   const { id } = useParams();
