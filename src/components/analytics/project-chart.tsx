@@ -39,27 +39,30 @@ interface ProjectChartProps {
 }
 
 export function ProjectChart({ data }: ProjectChartProps) {
-  const [chartError, setChartError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const [hasData, setHasData] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-    if (!data || !data.datasets || data.datasets.length === 0) {
-      console.warn('ProjectChart received invalid data:', data);
-      setChartError('Invalid chart data');
+    
+    // Validate data
+    if (!data || !data.datasets || !data.labels) {
+      console.warn('ProjectChart: Invalid data structure', data);
+      setChartError('Invalid chart data structure');
       return;
     }
 
-    if (!data.labels || data.labels.length === 0) {
-      console.warn('ProjectChart received invalid labels:', data.labels);
-      setChartError('Invalid chart labels');
-      return;
+    // Check if any dataset has non-zero values
+    const hasNonZeroValues = data.datasets.some(dataset => 
+      dataset.data.some(value => value > 0)
+    );
+    
+    setHasData(hasNonZeroValues);
+    
+    if (!hasNonZeroValues) {
+      console.log('ProjectChart: All datasets contain only zero values');
     }
-
-    setChartError(null);
   }, [data]);
 
   const options = {
@@ -68,11 +71,23 @@ export function ProjectChart({ data }: ProjectChartProps) {
     plugins: {
       legend: {
         position: 'top' as const,
+        labels: {
+          color: 'rgb(var(--foreground-rgb))',
+          usePointStyle: true,
+          padding: 20,
+        },
       },
       tooltip: {
         callbacks: {
-          label: (context: any) => {
-            return `${context.dataset.label}: ${context.parsed.y}h`;
+          label: function(context: any) {
+            let label = context.dataset.label || '';
+            if (label) {
+              label += ': ';
+            }
+            if (context.parsed.y !== null) {
+              label += `${context.parsed.y}h`;
+            }
+            return label;
           }
         }
       }
@@ -80,59 +95,76 @@ export function ProjectChart({ data }: ProjectChartProps) {
     scales: {
       y: {
         beginAtZero: true,
-        max: 15,
         ticks: {
-          stepSize: 1.5,
-          callback: (value: number) => `${value}h`
+          color: 'rgb(var(--foreground-rgb))',
+          callback: function(value: any) {
+            return value + 'h';
+          }
         },
         grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-        },
+          color: 'rgba(var(--foreground-rgb), 0.1)',
+        }
       },
       x: {
-        grid: {
-          display: false,
+        ticks: {
+          color: 'rgb(var(--foreground-rgb))',
         },
-      },
-    },
-    interaction: {
-      intersect: false,
-      mode: 'index',
-    },
-    elements: {
-      line: {
-        fill: true
+        grid: {
+          color: 'rgba(var(--foreground-rgb), 0.1)',
+        }
       }
-    }
+    },
+  };
+
+  // Create a modified version of data with minimum values for zero data
+  const getVisibleData = () => {
+    if (hasData) return data;
+    
+    // If no data, create a version with a tiny value to ensure the chart renders
+    return {
+      ...data,
+      datasets: data.datasets.map((dataset, index) => ({
+        ...dataset,
+        data: dataset.data.map(() => 0.01), // Tiny value to make lines visible
+        borderDash: [5, 5], // Dashed lines for placeholder data
+      }))
+    };
   };
 
   if (chartError) {
     return (
-      <div className="h-[300px] flex items-center justify-center text-red-500">
-        <p>Error rendering chart: {chartError}</p>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-red-500">Error loading chart: {chartError}</p>
       </div>
     );
   }
 
   if (!isClient) {
     return (
-      <div className="h-[300px] flex items-center justify-center">
-        <p className="text-gray-400">Loading chart...</p>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-500">Loading chart...</p>
       </div>
     );
   }
 
   try {
-    return (
-      <div className="h-[300px]">
-        <Line options={options} data={data} />
-      </div>
-    );
+    if (!hasData) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full">
+          <p className="text-gray-500 mb-4">No time data recorded yet</p>
+          <div className="text-sm text-gray-400">
+            Complete sessions in your projects to see data here
+          </div>
+        </div>
+      );
+    }
+    
+    return <Line options={options} data={data} />;
   } catch (error) {
     console.error('Error rendering chart:', error);
     return (
-      <div className="h-[300px] flex items-center justify-center text-red-500">
-        <p>Failed to render chart. Please try refreshing the page.</p>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-red-500">Error rendering chart: {error instanceof Error ? error.message : 'Unknown error'}</p>
       </div>
     );
   }
